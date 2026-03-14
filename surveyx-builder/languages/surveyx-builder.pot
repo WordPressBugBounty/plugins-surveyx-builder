@@ -1,0 +1,2558 @@
+# Copyright (C) 2026 ThemeRuby
+# This file is distributed under the GPLv3 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: SurveyX Builder\n"
+"Report-Msgid-Bugs-To: https://themeruby.com/contact\n"
+"POT-Creation-Date: 2026-02-21 14:15:25+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: ThemeRuby <support@themeruby.com>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: SurveyX POT Generator\n"
+"X-Domain: surveyx-builder\n"
+
+#: assets/admin/bundle.js:1
+msgid "Dashboard"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Settings"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Themes"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Helps"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The request has timed out. Please try again."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "API call failed with status %d"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Analytics Dashboard"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Comprehensive insights across all your surveys."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Views"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Started"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Completed"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading insights..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Total Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "completion rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Total Starts"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "of views"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Avg. Completion Time"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "per response"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Drop-off Rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "incomplete submissions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Completion Funnel"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Track user progress"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Engagement Metrics"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Key performance indicators"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Engagement Rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Completion Rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Bounce Rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No users have submitted responses to this survey yet."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No data available"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Export Data"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Download your survey responses and summary statistics as CSV files for further analysis."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Upgrade Now"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Text responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Other responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Contact info"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Date responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Scale responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Rating responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Untitled Question"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading summary..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Response Summary"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "answered"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "saw this question"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "resp."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Response rate"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load responses."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Text Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Other Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Contact Info"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Date Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Scale Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Rating Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No responses yet"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Load more"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Documentation"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Learn how to create, customize, and analyze surveys using SurveyX documentation."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View Documentation"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Embed to Website"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Copy the shortcode below and paste it where you want the survey to appear."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Size"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Copied!"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Copy"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Please activate the survey first in the General panel to get the embed code."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Support"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Need help? Reach out to our support team or browse common questions."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Get Support"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Refined Templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quickly create professional-looking surveys using our collection of predefined templates designed to save you time and inspire better feedback."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Browse Templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Unlimited Questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Advanced Question Types"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom Themes & Branching"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Upgrade to Pro"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "and much more..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Unlock Pro including unlimited questions, advanced question types, skip logic, custom themes, priority support..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quick Vote"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "A fast single question survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Multiple question survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Personality Test"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quiz with result-based personality classification."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Knowledge Quiz"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quiz with correct/incorrect scoring."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Please Enter The Survey Title before Submitting."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add New"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add New Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Create a new survey to effectively gather valuable feedback from your customers."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Use a Template"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quickly start with a predefined template."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter Survey Title..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Submit"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Back"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "My Items"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Use this section to create and manage your survey listings."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Type to search surveys..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Inactive"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Click to copy, double-click for details"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Analytics"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "General"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Editor"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Delete Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Items per page:"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "of"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load notifications."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Notifications"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Try Again"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No notifications"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Check back later for updates."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Learn More"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Maximum Choice"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The maximum number of votes a user can make."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Randomize Order"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display the answer choices in a random order."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Show Other Option"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter the question…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question Description"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add additional details to help users understand the question."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter question description…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Image"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Edit"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Remove"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Browse or upload file here."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add Question"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Show Message After Answering"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Displays a custom message once the user submits an answer."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter message…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Submit Button Label"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable to customize the submit button label."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "Ok"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display a text input field on the front end where the user can enter their response."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Placeholder Text"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter placeholder text..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Checkbox"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Dropdown Selection"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Image Checkbox"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Text Input"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Yes/No"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Change Question Type?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Continue"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cancel"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Queston Type: "
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Choose how the question should be answered"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Required"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Search question types..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Choose Type"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Choose Question Type"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Allow Return Back"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Users can return to previous questions and change their answers."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Appear Animation"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Choose animation effect for all surveys."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Upgrade"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Fade In"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Staggered"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Zoom In"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Brand Settings"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Customize your brand logo, toggle visibility, and edit text before or after it."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Email"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Manage your email sending configuration."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Dropdown"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question Type"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Specifies the default question type for this survey. This helps you quickly create questions without reselecting the type for each one."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Expiration Time"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Set the date and time when this survey should expire and stop accepting responses."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Footer Branding Logo"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Header Branding Logo"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display your custom branding logo at the top left of the survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Mailchimp Integration"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Automatically sync collected emails to your Mailchimp audience."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Upgrade Pro"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question Index"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Progress Bar"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Both"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Progress Indicators"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Choose how to display survey progress: question index badge before title, progress bar, or both."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "reCAPTCHA v3"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Google reCAPTCHA v3 with invisible verification and score-based bot detection."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Skip logic allows survey creators to define conditional paths so that respondents skip to specific questions based on their previous answers"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Allow Users to Start Again After Completion"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable participants to restart and edit their responses after submission."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Theme"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Customize the look and feel of your survey using a variety of pre-designed themes."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cloudflare Turnstile"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Integrate Cloudflare Turnstile for bot protection."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Answer Layout"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "edit"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Remove Image"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter the answer…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Delete Answer"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "At least one answer is required."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Is correct answer?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Associate With"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add Answer"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Closing"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter closing title ..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Closing Description"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add additional message or information when users complete the survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter closing description…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Image"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable CTA Button"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Show a call-to-action button that redirects users after completing the survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "CTA Button Label"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter a label for the CTA button ..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "CTA URL"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter the CTA URL ..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Open in New Tab"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Open the CTA link in a new browser tab."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Activate Cover"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display a call-to-action cover before the survey or survey begins."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Description"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add additional details before users start the survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter cover description…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Button"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Start Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "A label for a button that starts a survey, Default is Start."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Start"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Title"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover "
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Skip Logic"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Results"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Untitled"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Delete"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey deleted successfully"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey is missing a title. Please add a title before saving."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question %d is missing a title. Would you like to save anyway (this question will be skipped) or continue editing?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question %d requires at least one answer. Would you like to save anyway (this question will be skipped) or continue editing?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Missing Survey Title"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Missing Question Title"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Missing Answers"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save Anyway"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Continue Editing"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Unsaved Changes"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Are you sure you want to leave and discard changes?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Leave Anyway"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Keep Editing"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading editor..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save Your Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save your changes. Auto-save is enabled and will save automatically as you edit."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Last Updated"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save this survey first, then activate it in the General panel to get the embed code."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Please activate the survey in the General panel to get the embed code."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Autosaving..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Autosaved"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Autosave failed"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Recent Versions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable Revote on Update?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "When enabled, adding or deleting questions/answers will clear all previous responses. This may result in loss of tracking data. Use with caution."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load settings"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading settings..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Activate Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable this option to make the survey live and visible to participants."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Auto-Submit on Selection"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Automatically move to the next question. Works only for single-choice questions."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Active reCAPTCHA"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable reCAPTCHA to protect your forms from spam and automated abuse."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Setting"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Show Correct and Incorrect Answer Markers"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display green checkmarks for correct answers and red X marks for incorrect answers after submission."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Include a Countdown Timer"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Adds a countdown timer to display the survey duration."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enable Vote Results Button"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display a button in results page allowing users to view detailed vote statistics."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Login Required to Vote"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Only logged-in users can participate in this survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Allow Revote on Update"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "When enabled, adding or deleting questions/answers will clear all previous responses, allowing users to vote again."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Modify the survey questions, settings, and appearance to tailor the survey to your needs."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "correct answer"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "correct answers"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Activate Results"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "They will see which outcome matches their responses and how many questions they answered correctly."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Result"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter result title ..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Type @ to insert dynamic values like score and total questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Result Description"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add a detailed description to explain this result to users."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter result description…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Title"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This title will be displayed to participants and should accurately reflect the purpose or question of your survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Starting import..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Import failed."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Template imported successfully!"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The template import has failed. Please try again."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Use This Template"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Importing template..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Back to Templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The template could not be found."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "All Templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Get inspired. Build faster with templates tailored to your needs."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Search all templates..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "All"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Free"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Pro"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "All Types"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Vote"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Trivia"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Personality"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View Template"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading preview..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Clear"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No entries to display"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Once you create a survey and start receiving feedback, the data will appear here."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Available in Pro"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View individual survey responses with comprehensive answer data, advanced filtering, and export capabilities."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View all responses in detailed table"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Search and filter responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Export to CSV format"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Individual response details"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Get comprehensive insights across all your surveys with advanced analytics and real-time monitoring."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Performance metrics across surveys"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Response trends over time"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Top & worst performers comparison"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Real-time session monitoring"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom Themes"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Create stunning custom themes to match your brand identity with full control over colors, fonts, and layouts."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom colors & gradients"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Typography customization"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Background images & patterns"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "CSS overrides support"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question Analytics"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View detailed response rates and drop-off analysis for each question."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Response rate per question"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Drop-off point analysis"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question flow insights"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Engagement hotspots"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Create dynamic surveys that adapt based on respondent answers with powerful branching logic."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Branch based on answers"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Hide/show questions dynamically"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Skip to specific questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Jump to end based on criteria"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Branding & Logo"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Remove SurveyX branding and add your own logo for a professional, branded experience."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom logo upload"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Remove SurveyX branding"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Brand color customization"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Professional appearance"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Email Notifications"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Get notified instantly when someone completes your survey with detailed response summaries."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Instant completion alerts"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Multiple recipients support"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Response summary in email"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Customizable email templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Export to CSV"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Export all your survey responses to CSV format for advanced analysis and reporting."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Export all responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Filter before export"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Excel-compatible format"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Bulk data download"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Expiration Date"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Set automatic start and end dates for your surveys to control availability."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Schedule survey start date"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Set automatic expiration"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom expiration messages"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Time-sensitive campaigns"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Pro Question Types"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Unlock powerful question types including file upload, matrix, ranking, and more."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "File upload questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Matrix/grid questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Ranking questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Image choice questions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Create comprehensive surveys with unlimited questions per survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No question limits"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Long-form surveys"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Comprehensive questionnaires"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Detailed assessments"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: client/form-shortcode.php
+msgid "Pro Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This is a Pro survey. Please activate the SurveyX Pro plugin to edit this survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Pro Features Include:"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Skip Logic & Branching"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Custom Branding"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Advanced Analytics"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Priority Support"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Search..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "No results found"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Thank You for Your Feedback"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Your response has been successfully submitted. We appreciate your time and effort in helping us improve."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Multiple Choice"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Single Choice"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Picture Choice"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Text"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Long Text"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Phone"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Number"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Date"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Rating"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Scale"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "NPS"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Slider"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Ranking"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Matrix"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "File Upload"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Signature"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Payment"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Address"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Website"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Welcome"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Ending"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Statement"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Hidden Field"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Redirect"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Calculator"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Question"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Select Image"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Use This Image"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Not at all likely"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Neutral"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Extremely likely"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Changing to an input type will hide existing answers. Do you want to continue?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Changing the question type may affect existing answers. Do you want to continue?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Yes"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Name"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Company"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Poll"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Quiz"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Active"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Inactive"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Archived"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Trash"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "1 response"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Short Text"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Opinion Scale"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Autosave"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Snapshot"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Manual"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Restore Autosave?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "A more recent autosave was found. Would you like to restore it?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Restore"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Keep Current"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Autosave restored successfully"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Restore This Version?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Your current unsaved changes will be replaced."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Revision restored successfully"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Are you sure?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Do you want to proceed with this action?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Confirm"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "Error Occurred"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "Please check again."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "OK"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "expired"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Just now"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "minute ago"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "minutes ago"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "hour ago"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "hours ago"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load analytics data"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load responses"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Analytics data refreshed"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to refresh data"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "ID"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Status"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Embed"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Actions"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Creation"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load surveys"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Shortcode copied to clipboard"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Insights"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Summary"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Refreshing..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Refresh"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cached"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Refreshes in"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Access and manage all your created surveys."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load documentation."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading documentation..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Help & Resources"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Find guides and documentation to help you get started with SurveyX."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No docs available"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No documentation available"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Documentation will appear here when available."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View Docs"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This page could not be found."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Oops! The page you are looking for does not exist. It might have been removed, had its name changed, or is temporarily unavailable."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Go Back to Dashboard"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Incomplete Settings"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "You have partially filled %s settings. Please complete all required fields or clear the data before leaving."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save Failed"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to save settings. Do you want to leave anyway?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Stay"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Connect reCAPTCHA v2, Cloudflare Turnstile, enable email sending, and create new custom themes."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Collapse All"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Expand All"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Security & Spam Protection"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "reCAPTCHA v2"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "reCAPTCHA v2 integration for spam protection."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Site Key"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter your site key"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Secret Key"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter your secret key"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Integrations"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Branding"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Appearance"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display Alphabet Labels"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Show alphabet labels (A, B, C, D) before each answer in select and image select questions."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to load survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The survey you are looking for does not exist or may have been deleted."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: client/form-shortcode.php
+msgid "Survey Not Found"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "An error occurred while fetching templates."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading templates..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Create and manage custom themes to match your brand identity and style preferences."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Powered by"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "No captcha configured"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Verifying..."
+msgstr ""
+
+#: assets/client/bundle.js:1
+#: admin/analytics-database.php
+msgid "Other"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Vote Results"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Loading results..."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "vote"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "votes"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Type or select an option"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Show options"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Enter your text here"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Brand Logo"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "press"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Enter"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "You can choose up to"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "options"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "View Chart Result"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Dismiss"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Failed to load survey. Please refresh the page."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "This question requires an answer. Please type your response."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Please select at least one option to continue."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Please choose an option from the dropdown to continue."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Please select an image to continue."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Please fill in all required fields."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Please select an answer to continue."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "0 votes"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "1 vote"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Thank You"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Thank you for completing the survey!"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "View Results"
+msgstr ""
+
+#: admin/admin-menu.php
+msgid "Get SurveyX Pro"
+msgstr ""
+
+#: admin/admin-menu.php
+msgid "SurveyX"
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey ID is missing."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey not found."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Failed to load survey."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "The survey you are looking for could not be found."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "An error occurred while retrieving the survey or it was not found in the database."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Analytics data refreshed successfully."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Invalid JSON payload."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey title is required."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "An error occurred while creating the survey in the database."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey \"%s\" created successfully!"
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey ID is required."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey with ID %d could not be found."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Unable to delete the survey with ID: %d. Please try again."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey \"%s\" was deleted successfully."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Invalid request data."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey ID is missing or invalid."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "No changes were made."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Failed to update survey. Please try again."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey \"%s\" updated successfully!"
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Error during saving survey. Please try again."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Failed to update settings. Please try again."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "%s updated successfully"
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "No templates available. Could not fetch from cache or remote server."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Templates retrieved successfully."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "No docs available. Could not fetch from cache or remote server."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Docs retrieved successfully."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "No notifications available."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Notifications retrieved successfully."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey ID or Revision ID is missing."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Revision not found."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Template ID is required."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Question ID is missing."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Invalid answer type."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Import ID is required."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Import not found."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Import complete!"
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Loading template data..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Template data loaded from cache."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Downloading template..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Failed to download template: %s"
+msgstr ""
+
+#: admin/import-handler.php
+msgid "A valid license is required to import this template."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Template download failed with status: %d"
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Invalid template data received."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Template downloaded successfully."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Analyzing media files..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "No external media to import."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Found %d media files to import..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Uploading media..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Media import complete (%d files)."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Creating survey..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Invalid template data for importing."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Failed to create survey in database."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Importing survey content..."
+msgstr ""
+
+#: admin/import-handler.php
+msgid "Importing questions and answers..."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Invalid image URL provided."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Invalid image URL format."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "URL does not point to a valid image."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Failed to retrieve image: %s"
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Invalid response code: %d"
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Invalid image MIME type."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Image file is too large. Maximum size: %s"
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Failed to download image: %s"
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Downloaded file exceeds size limit."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Invalid or disallowed file type."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Downloaded file not found."
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Failed to sideload image: %s"
+msgstr ""
+
+#: admin/media-helpers.php
+msgid "Failed to get attachment URL."
+msgstr ""
+
+#: admin/rest-routes.php
+msgid "Sorry, you are not allowed to access this resource."
+msgstr ""
+
+#: client/client-services.php
+msgid "Survey not found or not published."
+msgstr ""
+
+#: client/client-services.php
+msgid "Vote results are not enabled for this survey."
+msgstr ""
+
+#: client/client-services.php
+msgid "Failed to get total votes"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Survey ID Missing"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "The shortcode is missing a survey ID. Use format: [surveyx id=\"123\"]"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Survey ID %s does not exist or may only be available in the Pro version."
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "This survey uses Pro features. Please activate SurveyX Pro to display it."
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Survey Not Available"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Survey ID %s exists but settings could not be loaded. This survey may only be available in the Pro version."
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Edit Survey"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Logo"
+msgstr ""
+
+#: client/handlers/init.php
+msgid "Survey not found"
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Session not found. Please refresh and try again."
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Progress saved successfully!"
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Please select an answer"
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Failed to save response."
+msgstr ""
+
+#: client/handlers/question-seen.php
+#: client/handlers/validation.php
+msgid "Invalid respondent ID"
+msgstr ""
+
+#: client/handlers/validation.php
+msgid "Invalid data"
+msgstr ""
+
+#: client/handlers/validation.php
+msgid "Invalid survey ID"
+msgstr ""
+
+#: client/handlers/validation.php
+msgid "Invalid question ID"
+msgstr ""
+
+#: client/handlers/validation.php
+msgid "Please input your answer"
+msgstr ""
+
+#: includes/admin-helpers.php
+msgid "reCAPTCHA v2 Secret Key is required when Site Key is provided."
+msgstr ""
+
+#: includes/admin-helpers.php
+msgid "reCAPTCHA v2 Site Key is required when Secret Key is provided."
+msgstr ""
+
