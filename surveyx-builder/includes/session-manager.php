@@ -27,7 +27,7 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		 *
 		 * @return string MySQL datetime format in UTC.
 		 */
-		protected static function get_utc_now() {
+		public static function get_utc_now() {
 			return surveyx_get_utc_now();
 		}
 
@@ -541,38 +541,41 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 
 		/**
 		 * Marks stale sessions as dropped-off and sets restart_pending = 1.
-		 * Called by cron job.
+		 * Called by cron job. Uses single UPDATE query with subquery for performance.
 		 *
 		 * @return int Number of sessions marked as dropped-off.
 		 */
 		public static function mark_stale_sessions_as_dropped() {
 			global $wpdb;
 
-			$stale_sessions = self::get_stale_sessions();
-			$count          = 0;
+			$timeout_minutes = self::SESSION_TIMEOUT_MINUTES;
+			$utc_now         = surveyx_get_utc_now();
 
-			foreach ( $stale_sessions as $session ) {
-				$time_spent = SurveyX_Db::get_session_time_spent( $session->id, $session->respondent_id );
+			// Single query to update all stale sessions with calculated time_spent
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$count = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->prefix}surveyx_sessions ss
+					SET
+						ss.session_status = 'dropped_off',
+						ss.restart_pending = 1,
+						ss.time_spent = GREATEST(
+							COALESCE(
+								(SELECT TIMESTAMPDIFF(SECOND, MIN(r.viewed_at), MAX(r.answered_at))
+								 FROM {$wpdb->prefix}surveyx_responses r
+								 WHERE r.session_id = ss.id AND r.response_status = 'answered'),
+								0
+							),
+							0
+						)
+					WHERE ss.session_status = 'active'
+					AND ss.last_activity_at < DATE_SUB(%s, INTERVAL %d MINUTE)",
+					$utc_now,
+					$timeout_minutes
+				)
+			);
 
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$result = $wpdb->update(
-					$wpdb->prefix . 'surveyx_sessions',
-					[
-						'session_status'  => 'dropped_off',
-						'restart_pending' => 1,
-						'time_spent'      => $time_spent,
-					],
-					[ 'id' => $session->id ],
-					[ '%s', '%d', '%d' ],
-					[ '%d' ]
-				);
-
-				if ( false !== $result ) {
-					++$count;
-				}
-			}
-
-			return $count;
+			return (int) $count;
 		}
 	}
 }

@@ -159,7 +159,10 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				$question_order = array_column( $data['questions'], 'id' );
 
 				if ( ! empty( $question_order ) ) {
-					static::create_session( $survey_id, $respondent_id, $question_order );
+					$session_created = static::create_session( $survey_id, $respondent_id, $question_order );
+					if ( $session_created ) {
+						$response_data['session_status'] = 'viewed';
+					}
 				}
 			}
 
@@ -254,7 +257,7 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 * @param int    $survey_id      Survey ID.
 		 * @param string $respondent_id  Respondent UUID.
 		 * @param array  $question_order Array of question IDs.
-		 * @return void
+		 * @return bool True on success, false on failure.
 		 */
 		protected static function create_session( $survey_id, $respondent_id, $question_order ) {
 			// Get request data
@@ -268,10 +271,13 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				$request_data
 			);
 
-			// Increment view count
+			// Increment view count only on success
 			if ( $session_id ) {
 				SurveyX_Db::increment_view_count( $survey_id );
+				return true;
 			}
+
+			return false;
 		}
 
 		/**

@@ -2,9 +2,9 @@
 Contributors: themeruby
 Tags: poll, survey, quiz, form, feedback
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.5.1
+Stable tag: 1.6.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -152,9 +152,11 @@ Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to c
 
 == Changelog ==
 
-
-= 1.5.1 =
-* Fixed: SVN commit.
+= 1.6.0 =
+* Improved: Database performance with composite indexes for faster queries
+* Improved: Session cleanup cron job optimized to use single UPDATE query
+* Improved: Reduced duplicate database queries in progress handler
+* Improved: Better session creation result handling
 
 = 1.5.0 =
 * Fixed: Cover page start button Enter key handler working properly

@@ -8,7 +8,7 @@
  * Tags:              poll, survey, quiz, form, feedback
  * License:           GPLv3
  * License URI:       https://www.gnu.org/licenses/gpl-3.0.html
- * Version:           1.5.1
+ * Version:           1.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author URI:        https://themeruby.com/
@@ -26,7 +26,7 @@
 defined( 'ABSPATH' ) || exit;
 
 defined( 'SURVEYX_PATH' ) || define( 'SURVEYX_PATH', plugin_dir_path( __FILE__ ) );
-defined( 'SURVEYX_VERSION' ) || define( 'SURVEYX_VERSION', '1.5.1' );
+defined( 'SURVEYX_VERSION' ) || define( 'SURVEYX_VERSION', '1.6.0' );
 defined( 'SURVEYX_URL' ) || define( 'SURVEYX_URL', plugin_dir_url( __FILE__ ) );
 defined( 'SURVEYX_BASENAME' ) || define( 'SURVEYX_BASENAME', plugin_basename( __FILE__ ) );
 defined( 'SURVEYX_REST_NAMESPACE' ) || define( 'SURVEYX_REST_NAMESPACE', 'surveyx/v1' );
@@ -78,6 +78,11 @@ if ( ! class_exists( 'SurveyX_Builder', false ) ) {
 		 * @return void
 		 */
 		public function activation( $network ) {
+			// Skip if Pro is active to avoid duplicate function declarations.
+			if ( defined( 'SURVEYX_PRO_VERSION' ) ) {
+				return;
+			}
+
 			require_once SURVEYX_PATH . 'includes/db-migration.php';
 			require_once SURVEYX_PATH . 'includes/cron-jobs.php';
 
@@ -115,6 +120,11 @@ if ( ! class_exists( 'SurveyX_Builder', false ) ) {
 		 * @return void
 		 */
 		public function deactivation() {
+			// Skip if Pro is active - Pro handles its own cron cleanup.
+			if ( defined( 'SURVEYX_PRO_VERSION' ) ) {
+				return;
+			}
+
 			require_once SURVEYX_PATH . 'includes/cron-jobs.php';
 			surveyx_unregister_cron_events();
 		}
@@ -129,6 +139,9 @@ if ( ! class_exists( 'SurveyX_Builder', false ) ) {
 			if ( defined( 'SURVEYX_PRO_VERSION' ) ) {
 				return;
 			}
+
+			// Run database migrations if needed.
+			require_once SURVEYX_PATH . 'includes/db-migration.php';
 
 			// Load core helper files.
 			require_once SURVEYX_PATH . 'includes/admin-helpers.php';
