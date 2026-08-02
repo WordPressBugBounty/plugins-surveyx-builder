@@ -11,8 +11,9 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 	 * Sessions are tracked by respondent_id only.
 	 * Respondent information (email, IP, user_agent, location) is now stored in surveyx_respondents table.
 	 *
-	 * IMPORTANT: All datetime values are stored in UTC using gmdate('Y-m-d H:i:s')
-	 * to ensure consistent time calculations across different server timezones.
+	 * IMPORTANT: All datetime values are stored in UTC via surveyx_get_utc_now()
+	 * (WordPress core's current_time('mysql', true)) to ensure consistent time
+	 * calculations across different server and MySQL timezones.
 	 */
 	class SurveyX_Session_Manager {
 
@@ -23,7 +24,9 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 
 		/**
 		 * Gets current UTC datetime string for database storage.
-		 * Wrapper for centralized date helper function.
+		 *
+		 * Thin alias for surveyx_get_utc_now() — the single source of truth for
+		 * "now". Kept for its many in-class callers; do not add logic here.
 		 *
 		 * @return string MySQL datetime format in UTC.
 		 */
@@ -97,8 +100,6 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		 * @return bool True on success, false on failure.
 		 */
 		public static function activate_session( $survey_id, $respondent_id ) {
-			global $wpdb;
-
 			$session = self::get_active_session( $survey_id, $respondent_id );
 			if ( ! $session ) {
 				return false;
@@ -118,24 +119,84 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 				SurveyX_Db::delete_all_responses_by_session( $session->id, $respondent_id );
 			}
 
+			// Canonical 'active' transition (see set_session_state()).
+			return self::set_session_state( $session->id, 'active' );
+		}
+
+		/**
+		 * Canonical writer for a session status transition.
+		 *
+		 * Single funnel for the session state machine: writes the FULL canonical
+		 * column set for the target status so a row is never left in an inconsistent
+		 * half-updated combination (e.g. restart_pending=1 with session_status='viewed').
+		 * $overrides merges call-site-specific columns over the canonical set. Updates
+		 * by session id.
+		 *
+		 * Valid transitions written here: 'viewed' (fresh / reset-to-start) and
+		 * 'active' (respondent interacting). 'completed', 'dropped_off' and the bulk
+		 * 'expired' reset keep their own dedicated writers (complete_session,
+		 * mark_stale_sessions_as_dropped, SurveyX_Db::reset_sessions_for_survey) because
+		 * they carry status-specific bookkeeping (time_spent, restart_pending semantics)
+		 * or operate on many rows at once.
+		 *
+		 * @param int    $session_id Session id.
+		 * @param string $status     Target session_status ('viewed' | 'active').
+		 * @param array  $overrides  Extra column => value pairs to merge over the canonical set.
+		 * @return bool True on success, false on failure or unknown status.
+		 */
+		public static function set_session_state( $session_id, $status, $overrides = [] ) {
+			global $wpdb;
+
 			$now = self::get_utc_now();
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return false !== $wpdb->update(
-				$wpdb->prefix . 'surveyx_sessions',
-				[
+			// Full canonical column set per target status.
+			$canonical = [
+				'viewed' => [
+					'session_status'      => 'viewed',
+					'current_question_id' => 0,
+					'progress_percentage' => 0,
+					'completed_at'        => null,
+					'restart_pending'     => 0,
+					'last_activity_at'    => $now,
+				],
+				'active' => [
 					'session_status'      => 'active',
 					'restart_pending'     => 0,
 					'current_question_id' => 0,
 					'progress_percentage' => 0.00,
 					'last_activity_at'    => $now,
 				],
-				[
-					'survey_id'     => $survey_id,
-					'respondent_id' => $respondent_id,
-				],
-				[ '%s', '%d', '%d', '%f', '%s' ],
-				[ '%d', '%s' ]
+			];
+
+			if ( ! isset( $canonical[ $status ] ) ) {
+				return false;
+			}
+
+			$data = array_merge( $canonical[ $status ], $overrides );
+
+			// Per-column placeholder types, resolved from the merged column set.
+			$column_formats = [
+				'session_status'      => '%s',
+				'current_question_id' => '%d',
+				'progress_percentage' => '%f',
+				'completed_at'        => '%s',
+				'restart_pending'     => '%d',
+				'last_activity_at'    => '%s',
+				'time_spent'          => '%d',
+			];
+
+			$format = [];
+			foreach ( array_keys( $data ) as $column ) {
+				$format[] = $column_formats[ $column ] ?? '%s';
+			}
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return false !== $wpdb->update(
+				$wpdb->prefix . 'surveyx_sessions',
+				$data,
+				[ 'id' => $session_id ],
+				$format,
+				[ '%d' ]
 			);
 		}
 
@@ -148,29 +209,10 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		 * @return bool True on success, false on failure.
 		 */
 		public static function reset_expired_session( $session_id, $respondent_id ) {
-			global $wpdb;
-
 			SurveyX_Db::delete_all_responses_by_session( $session_id, $respondent_id );
 
-			$now = self::get_utc_now();
-
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return false !== $wpdb->update(
-				$wpdb->prefix . 'surveyx_sessions',
-				[
-					'session_status'      => 'viewed',
-					'current_question_id' => 0,
-					'progress_percentage' => 0,
-					'completed_at'        => null,
-					'restart_pending'     => 0,
-					'last_activity_at'    => $now,
-				],
-				[
-					'id' => $session_id,
-				],
-				[ '%s', '%d', '%d', '%s', '%d', '%s' ],
-				[ '%d' ]
-			);
+			// Canonical 'viewed' transition (fresh start) — see set_session_state().
+			return self::set_session_state( $session_id, 'viewed' );
 		}
 
 		/**
@@ -279,10 +321,13 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		 *
 		 * @return bool True on success, false on failure.
 		 */
-		public static function update_session_progress( $survey_id, $respondent_id, $question_id, $answered_count ) {
+		public static function update_session_progress( $survey_id, $respondent_id, $question_id, $answered_count, $session = null ) {
 			global $wpdb;
 
-			$session = self::get_active_session( $survey_id, $respondent_id );
+			// Reuse the caller-supplied session; only fall back to a fetch when absent.
+			if ( null === $session ) {
+				$session = self::get_active_session( $survey_id, $respondent_id );
+			}
 			if ( ! $session ) {
 				return false;
 			}
@@ -291,19 +336,20 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 				return false;
 			}
 
-			$now        = self::get_utc_now();
-			$total      = (int) $session->total_questions;
-			$progress   = $total > 0 ? ( $answered_count / $total ) * 100 : 0;
-			$time_spent = SurveyX_Db::get_session_time_spent( $session->id, $respondent_id );
+			$now      = self::get_utc_now();
+			$total    = (int) $session->total_questions;
+			$progress = $total > 0 ? ( $answered_count / $total ) * 100 : 0;
 
+			// time_spent is only consumed at completion (complete_session and
+			// mark_stale_sessions_as_dropped both recompute it), so it is not
+			// refreshed on every answer to avoid a MIN/MAX scan per /progress.
 			$update_data = [
 				'current_question_id' => $question_id,
 				'progress_percentage' => $progress,
 				'last_activity_at'    => $now,
-				'time_spent'          => $time_spent,
 			];
 
-			$format = [ '%d', '%f', '%s', '%d' ];
+			$format = [ '%d', '%f', '%s' ];
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			return false !== $wpdb->update(
@@ -363,72 +409,6 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		}
 
 		/**
-		 * Reset session progress to 0 (used when starting editing mode after deleting all responses).
-		 *
-		 * @param int    $survey_id     Survey ID.
-		 * @param string $respondent_id Respondent UUID.
-		 * @return bool True on success, false on failure.
-		 */
-		public static function reset_session_progress( $survey_id, $respondent_id ) {
-			global $wpdb;
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return false !== $wpdb->update(
-				$wpdb->prefix . 'surveyx_sessions',
-				[
-					'progress_percentage' => 0.00,
-					'last_activity_at'    => self::get_utc_now(),
-				],
-				[
-					'survey_id'     => $survey_id,
-					'respondent_id' => $respondent_id,
-				],
-				[ '%f', '%s' ],
-				[ '%d', '%s' ]
-			);
-		}
-
-		/**
-		 * Updates last activity timestamp to prevent timeout.
-		 * Activates session if needed (viewed or restart_pending).
-		 *
-		 * @param int    $survey_id     The ID of the survey.
-		 * @param string $respondent_id Unique identifier.
-		 *
-		 * @return bool True on success, false on failure.
-		 */
-		public static function update_activity( $survey_id, $respondent_id ) {
-			global $wpdb;
-
-			$session = self::get_active_session( $survey_id, $respondent_id );
-			if ( ! $session ) {
-				return false;
-			}
-
-			if ( 'active' !== $session->session_status ) {
-				return false;
-			}
-
-			$update_data = [
-				'last_activity_at' => self::get_utc_now(),
-			];
-
-			$format = [ '%s' ];
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return false !== $wpdb->update(
-				$wpdb->prefix . 'surveyx_sessions',
-				$update_data,
-				[
-					'survey_id'     => $survey_id,
-					'respondent_id' => $respondent_id,
-				],
-				$format,
-				[ '%d', '%s' ]
-			);
-		}
-
-		/**
 		 * Retrieves an active session for a respondent.
 		 *
 		 * @param int    $survey_id     The ID of the survey.
@@ -456,85 +436,29 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 		}
 
 		/**
-		 * Checks if a session exists (any status).
+		 * Retrieves only the id + status of a session.
+		 *
+		 * Slim variant of get_active_session() for hot analytics paths
+		 * (e.g. /question-seen) that need nothing beyond identity and status.
 		 *
 		 * @param int    $survey_id     The ID of the survey.
 		 * @param string $respondent_id Unique identifier.
 		 *
-		 * @return bool True if session exists, false otherwise.
+		 * @return object|null Object with id + session_status, or null if not found.
 		 */
-		public static function session_exists( $survey_id, $respondent_id ) {
+		public static function get_session_id_status( $survey_id, $respondent_id ) {
 			global $wpdb;
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$count = $wpdb->get_var(
+			return $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->prefix}surveyx_sessions
+					"SELECT id, session_status
+					FROM {$wpdb->prefix}surveyx_sessions
 					WHERE survey_id = %d
-					AND respondent_id = %s",
+					AND respondent_id = %s
+					LIMIT 1",
 					$survey_id,
 					$respondent_id
-				)
-			);
-
-			return (int) $count > 0;
-		}
-
-		/**
-		 * Deletes a session and all associated responses.
-		 * Used when user wants to retry a survey.
-		 *
-		 * @param int    $survey_id     The ID of the survey.
-		 * @param string $respondent_id Unique identifier.
-		 *
-		 * @return bool True on success, false on failure.
-		 */
-		public static function delete_session( $survey_id, $respondent_id ) {
-			global $wpdb;
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->delete(
-				$wpdb->prefix . 'surveyx_responses',
-				[
-					'survey_id'     => $survey_id,
-					'respondent_id' => $respondent_id,
-				],
-				[ '%d', '%s' ]
-			);
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return false !== $wpdb->delete(
-				$wpdb->prefix . 'surveyx_sessions',
-				[
-					'survey_id'     => $survey_id,
-					'respondent_id' => $respondent_id,
-				],
-				[ '%d', '%s' ]
-			);
-		}
-
-		/**
-		 * Retrieves all stale sessions (inactive for more than SESSION_TIMEOUT_MINUTES).
-		 * Uses PHP gmdate() for consistent UTC time comparison.
-		 *
-		 * @return array Array of session objects.
-		 */
-		public static function get_stale_sessions() {
-			global $wpdb;
-
-			$timeout_minutes = self::SESSION_TIMEOUT_MINUTES;
-
-			$utc_now = surveyx_get_utc_now();
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT id, respondent_id
-					FROM {$wpdb->prefix}surveyx_sessions
-					WHERE session_status = 'active'
-					AND last_activity_at < DATE_SUB(%s, INTERVAL %d MINUTE)",
-					$utc_now,
-					$timeout_minutes
 				)
 			);
 		}

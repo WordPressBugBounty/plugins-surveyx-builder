@@ -31,16 +31,33 @@ function surveyx_handle_revote_on_update( $data ) {
 		return;
 	}
 
-	$new_questions = $data['questions'] ?? [];
-	$new_answers   = $data['answers'] ?? [];
+	$new_questions     = $data['questions'] ?? [];
+	$new_answers       = $data['answers'] ?? [];
+	$removed_questions = $data['remove_question_ids'] ?? [];
+	$removed_answers   = $data['remove_answer_ids'] ?? [];
 
-	// Skip if no content data (not an editor save)
-	if ( empty( $new_questions ) && empty( $new_answers ) ) {
+	// Skip if no content data at all (not an editor save)
+	if ( empty( $new_questions ) && empty( $new_answers ) && empty( $removed_questions ) && empty( $removed_answers ) ) {
 		return;
 	}
 
-	// Check if count changed (question/answer added or deleted)
-	if ( ! SurveyX_Db::has_count_changed( $survey_id, $new_questions, $new_answers ) ) {
+	// A structural change is a deletion, an addition (a new/temp id in the payload), or a
+	// net count change. A pure text edit (same items, same count) must NOT reset. Count
+	// alone misses a swap (delete 1 + add 1 keeps the count equal), so also honor the
+	// explicit delete lists and detect any temp id among the new items.
+	$has_deletion = ! empty( $removed_questions ) || ! empty( $removed_answers );
+
+	$has_addition = false;
+	foreach ( array_merge( $new_questions, $new_answers ) as $item ) {
+		if ( isset( $item['id'] ) && SurveyX_Admin_Helpers::is_temp_id( $item['id'] ) ) {
+			$has_addition = true;
+			break;
+		}
+	}
+
+	$count_changed = SurveyX_Db::has_count_changed( $survey_id, $new_questions, $new_answers );
+
+	if ( ! $has_deletion && ! $has_addition && ! $count_changed ) {
 		return;
 	}
 

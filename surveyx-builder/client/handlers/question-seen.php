@@ -50,20 +50,25 @@ if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 				);
 			}
 
-			// Get active session
-			$session = SurveyX_Session_Manager::get_active_session( $survey_id, $respondent_id );
-			if ( ! $session || 'completed' === $session->session_status ) {
-				return new WP_REST_Response( [ 'ok' => true ], 200 );
+			// Rate limit: burst protection on analytics tracking writes.
+			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'question_seen', (string) $respondent_id, 90, 60 );
+			if ( is_wp_error( $rate_check ) ) {
+				return SurveyX_Validation_Helper::error_response( $rate_check );
 			}
 
-			// Check if response already exists for this question
-			if ( SurveyX_Db::has_responses_for_question( $session->id, $question_id, $respondent_id ) ) {
+			// Get session identity + status only (analytics path needs nothing more)
+			$session = SurveyX_Session_Manager::get_session_id_status( $survey_id, $respondent_id );
+			if ( ! $session || 'completed' === $session->session_status ) {
 				return new WP_REST_Response( [ 'ok' => true ], 200 );
 			}
 
 			$now = surveyx_get_utc_now();
 
-			// Create 'seen' response - status updated to 'answered' or 'skipped_optional' by /progress
+			// Record a 'seen' response. Idempotent: create_seen_response only inserts
+			// when no response exists yet for this question, so navigating back to an
+			// already-viewed (or already-answered) question neither duplicates the
+			// 'seen' row nor overwrites an existing answer. Status is later promoted to
+			// 'answered'/'skipped_optional' by /progress.
 			SurveyX_Db::create_seen_response(
 				$session->id,
 				$survey_id,
@@ -73,7 +78,12 @@ if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 				$now
 			);
 
-			// Update current_question_id for accurate drop-off tracking
+			// Always advance current_question_id + last_activity_at, even when the
+			// question was already seen (Back navigation). Keeping current_question_id
+			// aligned with what the respondent is actually viewing is what makes
+			// drop-off analytics accurate: mark_stale_sessions_as_dropped leaves
+			// current_question_id untouched, and get_most_common_dropoff() groups
+			// dropped_off sessions by it to report where respondents abandon.
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->query(
 				$wpdb->prepare(

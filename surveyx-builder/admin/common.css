@@ -1,0 +1,53 @@
+/**
+ * SurveyX Builder — global admin stylesheet.
+ *
+ * Loaded on EVERY wp-admin page (not just the SurveyX SPA), because the
+ * Free-only upgrade CTAs it styles live in the WordPress admin chrome that is
+ * present on all screens: the "Upgrade to Pro" admin-menu item and the
+ * "Get SurveyX Pro" plugins-page action link.
+ *
+ * Keep this file tiny and framework-free — it is a plain static stylesheet
+ * enqueued directly (not built through webpack).
+ */
+
+/* --------------------------------------------------------------------------
+ * "Upgrade to Pro" submenu item — rendered as a pink pill in the admin sidebar.
+ * WordPress submenu items can't carry a custom class, so (like Elementor) we
+ * target the link by its pricing href.
+ * ------------------------------------------------------------------------ */
+#adminmenu .wp-submenu a[href="https://surveyx.co/pricing/"] {
+  display: block;
+  margin: 8px 12px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ff2a76 0%, #d5005c 100%);
+  color: #fff !important;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.3px;
+  text-align: center;
+  transition:
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+#adminmenu .wp-submenu a[href="https://surveyx.co/pricing/"]:hover,
+#adminmenu .wp-submenu a[href="https://surveyx.co/pricing/"]:focus {
+  background: linear-gradient(90deg, #ff2a76 0%, #d5005c 100%);
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(213, 0, 92, 0.4);
+  filter: brightness(1.06);
+}
+
+/* --------------------------------------------------------------------------
+ * "Get SurveyX Pro" — plugins-page action link.
+ * ------------------------------------------------------------------------ */
+.surveyx-get-pro {
+  color: #d5005c !important;
+  font-weight: 600;
+}
+
+.surveyx-get-pro:hover,
+.surveyx-get-pro:focus {
+  color: #ff2a76 !important;
+}

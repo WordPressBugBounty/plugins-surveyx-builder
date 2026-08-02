@@ -147,9 +147,12 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 		 *
 		 * @param string $image_url The source URL of the image.
 		 * @param string $filename Optional custom filename for the uploaded file.
+		 * @param int    $timeout  Optional request timeout in seconds for the HEAD check and download.
+		 *                         Defaults to self::REQUEST_TIMEOUT. Bulk import passes a short value to fail fast.
 		 * @return array|WP_Error Returns an array with 'id' and 'url' on success, or WP_Error on failure.
 		 */
-		public static function upload_image( $image_url, $filename = '' ) {
+		public static function upload_image( $image_url, $filename = '', $timeout = self::REQUEST_TIMEOUT ) {
+			$timeout = absint( $timeout ) > 0 ? absint( $timeout ) : self::REQUEST_TIMEOUT;
 			// Validate URL
 			if ( empty( $image_url ) || ! is_string( $image_url ) ) {
 				return new WP_Error( 'invalid_url', esc_html__( 'Invalid image URL provided.', 'surveyx-builder' ) );
@@ -174,7 +177,7 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 			$response = wp_safe_remote_head(
 				$image_url,
 				[
-					'timeout'     => self::REQUEST_TIMEOUT,
+					'timeout'     => $timeout,
 					'redirection' => 5,
 					'sslverify'   => true,
 				]
@@ -243,7 +246,7 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 			}
 
 			// Download the image to a temporary file
-			$tmp = download_url( $image_url, self::REQUEST_TIMEOUT );
+			$tmp = download_url( $image_url, $timeout );
 			if ( is_wp_error( $tmp ) ) {
 				return new WP_Error(
 					'download_failed',
@@ -365,22 +368,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 			}
 
 			return $processed;
-		}
-
-		/**
-		 * Public entry point: process all image URLs within a dataset.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $data Input data containing image URLs.
-		 * @return array Data with external images uploaded and replaced by local references.
-		 */
-		public static function process_image_urls( $data ) {
-			if ( ! is_array( $data ) ) {
-				return $data;
-			}
-
-			return self::process_recursive( $data );
 		}
 	}
 }

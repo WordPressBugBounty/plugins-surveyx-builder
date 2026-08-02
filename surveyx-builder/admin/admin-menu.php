@@ -10,6 +10,9 @@ if ( ! class_exists( 'SurveyX_Admin_Menu', false ) ) {
 
 		public const PREFIX = 'surveyx-';
 
+		/** Upgrade/pricing URL reused for the free "Upgrade to Pro" CTA. */
+		public const UPGRADE_URL = 'https://surveyx.co/pricing/';
+
 		public static function get_instance() {
 			if ( null === self::$instance ) {
 				self::$instance = new self();
@@ -20,8 +23,83 @@ if ( ! class_exists( 'SurveyX_Admin_Menu', false ) ) {
 
 		protected function __construct() {
 			add_action( 'admin_menu', [ $this, 'register_page_panel' ], 2900 );
+
+			// Register the quick-nav submenu AFTER the parent menu, and — in Pro — after
+			// Freemius rebuilds $submenu at WP_FS__LOWEST_PRIORITY (999999999). Free has no
+			// Freemius, so the constant is absent and a small offset from the parent is used.
+			$submenu_priority = defined( 'WP_FS__LOWEST_PRIORITY' ) ? WP_FS__LOWEST_PRIORITY + 1 : 2905;
+			add_action( 'admin_menu', [ $this, 'register_submenu_items' ], $submenu_priority );
+
 			add_filter( 'plugin_action_links_' . SURVEYX_BASENAME, [ $this, 'add_action_links' ] );
-			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_plugins_page_styles' ] );
+
+			// Global admin CSS: the Free-only upgrade CTAs live in the admin chrome
+			// (menu + plugins page) shown on every screen, so this loads everywhere.
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_common_assets' ] );
+		}
+
+		/**
+		 * Registers quick-navigation submenu items that deep-link into the hash-routed SPA.
+		 *
+		 * These are hash links to the SAME admin page, so they are pushed directly onto the
+		 * global $submenu['surveyx'] array (3-element form: title, capability, URL) rather
+		 * than registered as separate WP pages. The default parent-mirror item (slug
+		 * 'surveyx') is dropped; any externally-added items (e.g. Freemius Account/Pricing)
+		 * are preserved and kept after the nav. Runs late so it wins over Freemius.
+		 *
+		 * @return void
+		 */
+		public function register_submenu_items() {
+			if ( ! current_user_can( 'manage_options' ) ) {
+				return;
+			}
+
+			global $submenu;
+
+			// The parent menu is registered via add_menu_page() only, so WordPress
+			// never seeds $submenu['surveyx'] (that happens only when an
+			// add_submenu_page() is used). Initialise it so our nav items attach in
+			// the free plugin too; in Pro, Freemius has already populated it.
+			if ( ! isset( $submenu['surveyx'] ) ) {
+				$submenu['surveyx'] = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+
+			$base  = 'admin.php?page=surveyx';
+			$items = [
+				[ esc_html__( 'Dashboard', 'surveyx-builder' ), $base . '#/' ],
+				[ esc_html__( 'Surveys', 'surveyx-builder' ), $base . '#/?scroll=surveys' ],
+				[ esc_html__( 'Templates', 'surveyx-builder' ), $base . '#/templates' ],
+				[ esc_html__( 'Analytics', 'surveyx-builder' ), $base . '#/analytics' ],
+				[ esc_html__( 'Themes', 'surveyx-builder' ), $base . '#/themes' ],
+				[ esc_html__( 'Settings', 'surveyx-builder' ), $base . '#/settings' ],
+				[ esc_html__( 'Import / Export', 'surveyx-builder' ), $base . '#/import-export' ],
+				[ esc_html__( 'Helps', 'surveyx-builder' ), $base . '#/helps' ],
+			];
+
+			// Preserve externally-added items (e.g. Freemius), dropping the auto parent-mirror.
+			$preserved = [];
+			foreach ( $submenu['surveyx'] as $meta ) {
+				if ( isset( $meta[2] ) && 'surveyx' === $meta[2] ) {
+					continue;
+				}
+				$preserved[] = $meta;
+			}
+
+			$new = [];
+			foreach ( $items as $item ) {
+				$new[] = [ $item[0], 'manage_options', $item[1] ];
+			}
+
+			// Keep any external items (Freemius Account/Pricing) after the nav.
+			foreach ( $preserved as $meta ) {
+				$new[] = $meta;
+			}
+
+			// Free-only: "Upgrade to Pro" CTA (omitted in Pro); styled as a pink pill via CSS.
+			if ( ! defined( 'SURVEYX_PRO_VERSION' ) ) {
+				$new[] = [ esc_html__( 'Upgrade', 'surveyx-builder' ), 'manage_options', self::UPGRADE_URL ];
+			}
+
+			$submenu['surveyx'] = $new; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 
 		/**
@@ -32,28 +110,25 @@ if ( ! class_exists( 'SurveyX_Admin_Menu', false ) ) {
 		 */
 		public function add_action_links( $links ) {
 			if ( ! defined( 'SURVEYX_PRO_VERSION' ) ) {
-				$links[] = '<a href="https://surveyx.co/pricing/" target="_blank" class="surveyx-pro-link">' . esc_html__( 'Get SurveyX Pro', 'surveyx-builder' ) . '</a>';
+				$links[] = '<a href="https://surveyx.co/pricing/" target="_blank" class="surveyx-get-pro">' . esc_html__( 'Get SurveyX Pro', 'surveyx-builder' ) . '</a>';
 			}
 
 			return $links;
 		}
 
 		/**
-		 * Enqueue styles for the plugins page.
+		 * Enqueue the global admin stylesheet on EVERY wp-admin page.
 		 *
-		 * @param string $hook Current admin page hook.
+		 * Unlike admin_enqueue() (which loads the SPA bundle only on the SurveyX
+		 * page), this small static stylesheet styles the upgrade CTAs that live in
+		 * the WordPress admin chrome — the "Upgrade to Pro" submenu pill and the
+		 * "Get SurveyX Pro" plugins-page link — which appear on all admin screens.
+		 *
 		 * @return void
 		 */
-		public function enqueue_plugins_page_styles( $hook ) {
-			if ( 'plugins.php' !== $hook ) {
-				return;
-			}
-
-			$css = '.surveyx-pro-link{color:#d5005c;font-weight:600;transition:all .3s}.surveyx-pro-link:hover{opacity:.6}';
-
-			wp_register_style( 'sx-plugins', false, [], SURVEYX_VERSION );
-			wp_enqueue_style( 'sx-plugins' );
-			wp_add_inline_style( 'sx-plugins', $css );
+		public function enqueue_common_assets() {
+			$ver = SurveyX_Admin_Helpers::is_dev_mode() ? time() : SURVEYX_VERSION;
+			wp_enqueue_style( self::PREFIX . 'common', SURVEYX_URL . 'admin/common.css', [], $ver );
 		}
 
 		/**
@@ -67,18 +142,18 @@ if ( ! class_exists( 'SurveyX_Admin_Menu', false ) ) {
 		 */
 		public function admin_enqueue() {
 			$ver = SurveyX_Admin_Helpers::is_dev_mode() ? time() : SURVEYX_VERSION;
-			wp_register_style( self::PREFIX . 'vendor', SURVEYX_URL . 'assets/vendor/style.min.css', [], $ver );
+			wp_register_style( self::PREFIX . 'vendor-admin', SURVEYX_URL . 'assets/vendor-admin/style.min.css', [], $ver );
 			wp_register_style(
 				self::PREFIX . 'admin',
 				SURVEYX_URL . 'assets/admin/style.min.css',
 				[
-					self::PREFIX . 'vendor',
+					self::PREFIX . 'vendor-admin',
 				],
 				$ver
 			);
 
-			wp_register_script( self::PREFIX . 'vendor', SURVEYX_URL . 'assets/vendor/bundle.js', [], $ver, true );
-			wp_register_script( self::PREFIX . 'admin', SURVEYX_URL . 'assets/admin/bundle.js', [ 'wp-tinymce', 'wp-i18n' ,  self::PREFIX . 'vendor' ], $ver, true );
+			wp_register_script( self::PREFIX . 'vendor-admin', SURVEYX_URL . 'assets/vendor-admin/bundle.js', [], $ver, true );
+			wp_register_script( self::PREFIX . 'admin', SURVEYX_URL . 'assets/admin/bundle.js', [ 'wp-tinymce', 'wp-i18n' ,  self::PREFIX . 'vendor-admin' ], $ver, true );
 			$localize_data = apply_filters(
 				'surveyx_admin_localize_data',
 				[
@@ -119,7 +194,7 @@ if ( ! class_exists( 'SurveyX_Admin_Menu', false ) ) {
 				'surveyx',
 				[ $this, 'render_menu_page' ],
 				'data:image/svg+xml;base64,' . $this->get_plugin_icon(),
-				62
+				50 // Position above the Appearance menu (WP core Appearance is 60).
 			);
 
 			add_action( 'load-' . $panel_hook_suffix, [ $this, 'load_assets' ] );

@@ -101,6 +101,24 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
+		 * Returns a survey's mode ('basic' | 'pro'), or null if it doesn't exist.
+		 *
+		 * @param int $survey_id The survey ID.
+		 * @return string|null
+		 */
+		public static function get_survey_mode( $survey_id ) {
+			global $wpdb;
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT s_mode FROM {$wpdb->prefix}surveyx_surveys WHERE id = %d",
+					$survey_id
+				)
+			);
+		}
+
+		/**
 		 * Creates a new survey entry in the database.
 		 *
 		 * This method inserts a new row into the `surveyx_surveys` table
@@ -120,7 +138,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			// Default settings for new surveys
 			$default_settings = [
 				'skip_submit_button'       => true,
-				'show_header_branding'     => true,
+				'show_header_branding'     => false,
 				'show_footer_branding'     => true,
 				'show_start_again'         => true,
 				'view_votes_in_results'    => true,
@@ -150,7 +168,25 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ]
 			);
 
-			return $inserted ? $wpdb->insert_id : false;
+			if ( ! $inserted ) {
+				return false;
+			}
+
+			$new_survey_id = $wpdb->insert_id;
+
+			/**
+			 * Fires after a survey is created or its settings / content / questions /
+			 * answers are saved. Cache layers (e.g. the static /init payload) subscribe
+			 * to invalidate their entry so nothing stale survives the write; other
+			 * subsystems (summary / analytics caches) can hook in later. Replaces the
+			 * previous direct SurveyX_Db::flush_survey_init_cache() calls. Here it also
+			 * covers a fresh id reusing a just-deleted survey's slot.
+			 *
+			 * @param int $survey_id ID of the saved survey.
+			 */
+			do_action( 'surveyx_survey_saved', $new_survey_id );
+
+			return $new_survey_id;
 		}
 
 		/**
@@ -166,7 +202,17 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			global $wpdb;
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->delete( $wpdb->prefix . 'surveyx_surveys', [ 'id' => $survey_id ], [ '%d' ] );
+			$deleted = $wpdb->delete( $wpdb->prefix . 'surveyx_surveys', [ 'id' => $survey_id ], [ '%d' ] );
+
+			/**
+			 * Fires after a survey is deleted. Cache layers subscribe to drop any entry
+			 * keyed by this survey ID so nothing stale survives the deletion.
+			 *
+			 * @param int $survey_id ID of the deleted survey.
+			 */
+			do_action( 'surveyx_survey_deleted', $survey_id );
+
+			return $deleted;
 		}
 
 		/**
@@ -371,7 +417,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					"SELECT id, sorder, content
 			         FROM {$wpdb->prefix}surveyx_questions
 			         WHERE survey_id = %d
-			         ORDER BY sorder ASC",
+			         ORDER BY sorder ASC, id ASC",
 					$survey_id
 				)
 			);
@@ -388,7 +434,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					"SELECT id, title, question_id, sorder, content
 			         FROM {$wpdb->prefix}surveyx_answers
 			         WHERE survey_id = %d
-			         ORDER BY sorder ASC",
+			         ORDER BY sorder ASC, id ASC",
 					$survey_id
 				)
 			);
@@ -420,7 +466,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			global $wpdb;
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->update(
+			$result = $wpdb->update(
 				$wpdb->prefix . 'surveyx_surveys',
 				[
 					'survey_type' => $data['survey_type'],
@@ -437,6 +483,13 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				],
 				[ '%d' ] // id as integer
 			);
+
+			// Status / settings (theme, branding, s_mode, etc.) affect the static
+			// /init payload — fire the saved action so caches invalidate. Also covers
+			// publish/unpublish.
+			do_action( 'surveyx_survey_saved', $survey_id );
+
+			return $result;
 		}
 
 		/**
@@ -463,13 +516,18 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			];
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->update(
+			$result = $wpdb->update(
 				$wpdb->prefix . 'surveyx_surveys',
 				$update_data,
 				[ 'id' => (int) $survey_id ],
 				[ '%s', '%s', '%s', '%s' ],
 				[ '%d' ]
 			);
+
+			// Content changed — fire the saved action so caches invalidate.
+			do_action( 'surveyx_survey_saved', $survey_id );
+
+			return $result;
 		}
 
 		/**
@@ -480,7 +538,8 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		 * @param array $questions Array of questions data.
 		 * @param array $answers   Array of answers data.
 		 *
-		 * @return array ID mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
+		 * @return array|false ID mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
+		 *                     on success, or false when a DB write failed (transaction rolled back).
 		 */
 		public static function update_questions_and_answers_base( int $survey_id, array $questions = [], array $answers = [] ) {
 			global $wpdb;
@@ -499,6 +558,19 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			];
 
 			try {
+				// Bucket answers by their ORIGINAL question_id once (O(A)) so each
+				// question resolves only its own answers. This is the single key space
+				// used for the temp-id -> real-id reconciliation: a question is inserted/
+				// updated to its real id, then its answers (bucketed under the question's
+				// original id) are written against that real id in one pass.
+				$answers_by_qid = [];
+				foreach ( $answers as $a ) {
+					if ( empty( $a['question_id'] ) ) {
+						continue;
+					}
+					$answers_by_qid[ (string) $a['question_id'] ][] = $a;
+				}
+
 				foreach ( $questions as $q ) {
 					// Skip if the question has no ID
 					if ( empty( $q['id'] ) ) {
@@ -511,6 +583,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 						continue;
 					}
 
+					// This question's answers, keyed by its original (possibly temp) id.
+					$question_answer_rows = $answers_by_qid[ (string) $q['id'] ] ?? [];
+
 					// Get question type
 					$question_type = $q['content']['type'] ?? '';
 
@@ -520,11 +595,8 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					// If question requires answers, check if it has valid answers
 					if ( $requires_answers ) {
 						$question_answers = array_filter(
-							$answers,
-							function ( $a ) use ( $q ) {
-								if ( ! isset( $a['question_id'] ) || (string) $a['question_id'] !== (string) $q['id'] ) {
-									return false;
-								}
+							$question_answer_rows,
+							function ( $a ) {
 								// Check if answer has non-empty title
 								$title = $a['content']['title'] ?? '';
 								return ! empty( trim( $title ) );
@@ -537,15 +609,26 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 						}
 					}
 
+					// Resolve the real question id (insert or update), throwing on a
+					// write failure so the transaction rolls back instead of COMMITting
+					// a partial save.
 					if ( SurveyX_Admin_Helpers::is_temp_id( $q['id'] ) ) {
-						$real_qid                            = self::add_new_question( $survey_id, $q );
+						$real_qid = self::add_new_question( $survey_id, $q );
+						if ( false === $real_qid ) {
+							throw new Exception( 'Failed to insert question.' );
+						}
 						$id_mapping['questions'][ $q['id'] ] = $real_qid;
 					} else {
 						$real_qid = self::update_existing_question( $survey_id, $q );
+						if ( false === $real_qid ) {
+							throw new Exception( 'Failed to update question.' );
+						}
 					}
 
-					// Update answers and collect ID mappings
-					$answer_mappings       = self::update_answers_base( $survey_id, $real_qid, $q, $answers );
+					// Write this question's answers against the resolved real id. No
+					// second ownership filter is needed: the bucket already holds exactly
+					// this question's answers.
+					$answer_mappings       = self::update_answers_base( $survey_id, $real_qid, $question_answer_rows );
 					$id_mapping['answers'] = array_merge( $id_mapping['answers'], $answer_mappings );
 				}
 
@@ -553,28 +636,34 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->query( 'COMMIT' );
 
+				// Questions/answers changed — fire the saved action so caches invalidate.
+				do_action( 'surveyx_survey_saved', $survey_id );
+
 				return $id_mapping;
 			} catch ( Exception $exception ) {
-				// Rollback on error
+				// A write failed mid-save: roll back so we never persist a partial
+				// (question saved, answers missing) state, and signal failure to the
+				// caller so it can surface a non-200 instead of a false "success".
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->query( 'ROLLBACK' );
 
-				return $id_mapping;
+				return false;
 			}
 		}
 
 		/**
 		 * Update or add answers for a specific survey question.
-		 * Saves content to database.
+		 * Saves content to database. Throws on a DB write failure so the caller's
+		 * transaction can roll back.
 		 *
 		 * @param int   $survey_id The ID of the survey.
 		 * @param int   $real_qid  The real ID of the question (after insert/update).
-		 * @param array $q         The question data array. Expected keys include 'id'.
-		 * @param array $answers   Array of answers data.
+		 * @param array $answers   This question's answers (already scoped to it).
 		 *
 		 * @return array Answer ID mappings [temp_id => real_id]
+		 * @throws Exception When a DB write fails.
 		 */
-		public static function update_answers_base( int $survey_id, int $real_qid, array $q, array $answers ) {
+		public static function update_answers_base( int $survey_id, int $real_qid, array $answers ) {
 			$answer_mappings = [];
 
 			foreach ( $answers as $a ) {
@@ -583,16 +672,18 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					continue;
 				}
 
-				$answer_qid = $a['question_id'];
-
-				if ( $answer_qid === $q['id'] || intval( $answer_qid ) === $real_qid ) {
-					if ( empty( $a['id'] ) || SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
-						$real_aid = self::add_new_answer( $survey_id, $real_qid, $a );
-						if ( ! empty( $a['id'] ) && SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
-							$answer_mappings[ $a['id'] ] = $real_aid;
-						}
-					} else {
-						self::update_existing_answer( $survey_id, $real_qid, $a );
+				if ( empty( $a['id'] ) || SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
+					$real_aid = self::add_new_answer( $survey_id, $real_qid, $a );
+					if ( false === $real_aid ) {
+						throw new Exception( 'Failed to insert answer.' );
+					}
+					if ( ! empty( $a['id'] ) && SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
+						$answer_mappings[ $a['id'] ] = $real_aid;
+					}
+				} else {
+					$updated = self::update_existing_answer( $survey_id, $real_qid, $a );
+					if ( false === $updated ) {
+						throw new Exception( 'Failed to update answer.' );
 					}
 				}
 			}
@@ -616,7 +707,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder  = intval( $q['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-			$wpdb->insert(
+			$inserted = $wpdb->insert(
 				$wpdb->prefix . 'surveyx_questions',
 				[
 					'survey_id' => $survey_id,
@@ -626,6 +717,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				],
 				[ '%d', '%s', '%d', '%s' ]
 			);
+
+			// Signal the write failure so the enclosing transaction can roll back.
+			if ( false === $inserted ) {
+				return false;
+			}
 
 			return $wpdb->insert_id;
 		}
@@ -647,7 +743,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder      = intval( $q['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->update(
+			$updated = $wpdb->update(
 				$wpdb->prefix . 'surveyx_questions',
 				[
 					'title'   => $q['content']['title'] ?? '',
@@ -661,6 +757,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%s', '%s', '%d' ],
 				[ '%d', '%d' ]
 			);
+
+			// false = DB error (0 = no-op change), so only false is a failure.
+			if ( false === $updated ) {
+				return false;
+			}
 
 			return $question_id;
 		}
@@ -682,7 +783,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder  = intval( $a['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-			$wpdb->insert(
+			$inserted = $wpdb->insert(
 				$wpdb->prefix . 'surveyx_answers',
 				[
 					'survey_id'   => $survey_id,
@@ -693,6 +794,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				],
 				[ '%d', '%d', '%s', '%d', '%s' ]
 			);
+
+			// Signal the write failure so the enclosing transaction can roll back.
+			if ( false === $inserted ) {
+				return false;
+			}
 
 			return $wpdb->insert_id;
 		}
@@ -715,7 +821,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder    = intval( $a['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->update(
+			$updated = $wpdb->update(
 				$wpdb->prefix . 'surveyx_answers',
 				[
 					'question_id' => $question_id,
@@ -730,6 +836,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d', '%s', '%s', '%d' ],
 				[ '%d', '%d' ]
 			);
+
+			// false = DB error (0 = no-op change), so only false is a failure.
+			if ( false === $updated ) {
+				return false;
+			}
 
 			return $answer_id;
 		}
@@ -840,6 +951,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				$format_values,
 				[ '%d' ]
 			);
+
+			// Imported content/settings changed — fire the saved action so caches invalidate.
+			do_action( 'surveyx_survey_saved', $survey_id );
 
 			return false !== $result ? $survey_id : false;
 		}

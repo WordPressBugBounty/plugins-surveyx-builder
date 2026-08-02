@@ -54,11 +54,36 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			// Parse request parameters
 			$params = static::parse_request_params( $request );
 
+			// Rate limit: burst protection on session creation / view inflation.
+			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'init', $params['respondent_id'], 30, 60 );
+			if ( is_wp_error( $rate_check ) ) {
+				return SurveyX_Validation_Helper::error_response( $rate_check );
+			}
+
+			// Fast reject: a respondent_id was sent but is malformed (garbage/injection
+			// attempt). Absent ids are left to init() so require_logged_in surveys still
+			// work. Short-circuits the get_survey_init_data() JOIN for junk input while
+			// matching the existing null-init response shape exactly.
+			if ( ! empty( $params['respondent_id_invalid'] ) ) {
+				return new WP_REST_Response(
+					[
+						'message' => esc_html__( 'Survey not found', 'surveyx-builder' ),
+					],
+					404
+				);
+			}
+
 			// Process single survey
 			$survey_result = static::init(
 				$params['survey_id'],
-				$params['respondent_id']
+				$params['respondent_id'],
+				$params['captcha_token']
 			);
+
+			// Captcha or other validation failure - do NOT create the session
+			if ( is_wp_error( $survey_result ) ) {
+				return SurveyX_Validation_Helper::error_response( $survey_result );
+			}
 
 			// If survey not found, return error
 			if ( null === $survey_result ) {
@@ -86,9 +111,18 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			$respondent_id_raw = $request->get_param( 'respondent_id' );
 			$respondent_id     = $respondent_id_raw ? SurveyX_Validation_Helper::sanitize_uuid( $respondent_id_raw ) : '';
 
+			// A non-empty raw value that sanitizes to '' is a garbage/injection
+			// attempt (present-but-malformed). An absent id is NOT flagged here so
+			// require_logged_in surveys still flow through init() as before.
+			$respondent_id_invalid = ! empty( $respondent_id_raw ) && '' === $respondent_id;
+
+			$captcha_token = sanitize_text_field( (string) $request->get_param( 'captcha_token' ) );
+
 			return [
-				'survey_id'     => $survey_id,
-				'respondent_id' => $respondent_id,
+				'survey_id'             => $survey_id,
+				'respondent_id'         => $respondent_id,
+				'respondent_id_invalid' => $respondent_id_invalid,
+				'captcha_token'         => $captcha_token,
 			];
 		}
 
@@ -97,9 +131,10 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 *
 		 * @param int    $survey_id     Survey ID.
 		 * @param string $respondent_id Respondent UUID.
-		 * @return array|null Survey data array or null if survey not found.
+		 * @param string $captcha_token Captcha response token from the client.
+		 * @return array|WP_Error|null Survey data array, WP_Error on captcha failure, or null if survey not found.
 		 */
-		protected static function init( $survey_id, $respondent_id ) {
+		protected static function init( $survey_id, $respondent_id, $captcha_token = '' ) {
 
 			// Combined query
 			$data = SurveyX_Db::get_survey_init_data( $survey_id, $respondent_id );
@@ -113,8 +148,24 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			// Check authentication requirements
 			$require_logged_in = rest_sanitize_boolean( $survey->settings['require_logged_in'] ?? false );
 
+			$is_logged_in = is_user_logged_in();
+
+			// The survey page HTML no longer embeds a per-user REST nonce (kept generic
+			// so full-page caches are safe), so the first /init arrives with no
+			// X-WP-Nonce header and WP's rest_cookie_check_errors() has reset the current
+			// user to 0. For login-required surveys, re-derive the logged-in user straight
+			// from the auth cookie for this read-only request. The authoritative, always
+			// correct nonce for subsequent authenticated calls is returned in `rest_nonce`.
+			if ( $require_logged_in && ! $is_logged_in ) {
+				$cookie_user_id = wp_validate_auth_cookie( '', 'logged_in' );
+				if ( $cookie_user_id ) {
+					wp_set_current_user( $cookie_user_id );
+					$is_logged_in = true;
+				}
+			}
+
 			// Early return if authentication requirements are not met
-			if ( $require_logged_in && ! is_user_logged_in() ) {
+			if ( $require_logged_in && ! $is_logged_in ) {
 				return null; // User must be logged in but isn't
 			}
 
@@ -125,14 +176,13 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			// Get session
 			$session = SurveyX_Session_Manager::get_active_session( $survey_id, $respondent_id );
 
-			// Handle expired session - reset to fresh state
+			// Handle expired session - reset to fresh state, then re-read the row so
+			// the in-memory session reflects the canonical reset without hand-patching
+			// each column here (kept consistent with set_session_state()).
 			if ( $session && 'expired' === $session->session_status ) {
 				SurveyX_Session_Manager::reset_expired_session( $session->id, $respondent_id );
-				$data['responses']            = [];
-				$session->session_status      = 'viewed';
-				$session->current_question_id = 0;
-				$session->progress_percentage = 0;
-				$session->restart_pending     = 0;
+				$data['responses'] = [];
+				$session           = SurveyX_Session_Manager::get_active_session( $survey_id, $respondent_id );
 			}
 
 			// Get voted data based on respondent_id
@@ -152,10 +202,23 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				'session_status'      => $session_status,
 				'restart_pending'     => $session ? (bool) $session->restart_pending : false,
 				'current_question_id' => $session ? (int) $session->current_question_id : 0,
+				// Fresh REST nonce for login-required surveys, delivered via this (never
+				// page-cached) POST response so every logged-in user gets their own valid
+				// nonce for later authenticated requests. Null for public surveys.
+				'rest_nonce'          => $require_logged_in ? wp_create_nonce( 'wp_rest' ) : null,
 			];
 
 			// Create session if it doesn't exist
 			if ( ! $session && ! empty( $data['questions'] ) ) {
+				// Enforce captcha at session start. Captcha enablement/keys/secret live in the
+				// GLOBAL plugin settings (the same source the front-end widget reads via the
+				// shortcode), not in the per-survey settings row — so resolve from there or the
+				// check silently no-ops and bots can POST straight to /init.
+				$captcha_check = static::verify_captcha( SurveyX_Db::get_settings(), $captcha_token );
+				if ( is_wp_error( $captcha_check ) ) {
+					return $captcha_check;
+				}
+
 				$question_order = array_column( $data['questions'], 'id' );
 
 				if ( ! empty( $question_order ) ) {
@@ -167,6 +230,63 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			}
 
 			return $response_data;
+		}
+
+		/**
+		 * Verify the captcha token when the survey has a captcha configured.
+		 *
+		 * Called at session start so bots cannot bypass the widget by POSTing
+		 * directly to /init. When no captcha is enabled for the survey this
+		 * is a no-op and returns true.
+		 *
+		 * @param array|object $settings      Full (unfiltered) survey settings.
+		 * @param string       $captcha_token Captcha response token from the client.
+		 * @return true|WP_Error True when passed or not required, WP_Error on failure.
+		 */
+		protected static function verify_captcha( $settings, $captcha_token ) {
+			$active = SurveyX_Captcha_Helpers::get_active_captcha( $settings );
+
+			if ( empty( $active['type'] ) || 'none' === $active['type'] ) {
+				return true;
+			}
+
+			$token = sanitize_text_field( (string) $captcha_token );
+
+			if ( '' === $token ) {
+				return new WP_Error(
+					'captcha_required',
+					esc_html__( 'Please complete the captcha challenge.', 'surveyx-builder' ),
+					[ 'status' => 403 ]
+				);
+			}
+
+			$get = function ( $key ) use ( $settings ) {
+				if ( is_object( $settings ) ) {
+					return $settings->$key ?? '';
+				}
+				return is_array( $settings ) ? ( $settings[ $key ] ?? '' ) : '';
+			};
+
+			$verified = false;
+
+			switch ( $active['type'] ) {
+				case 'recaptcha_v2':
+					$verified = SurveyX_Captcha_Helpers::verify_recaptcha_v2(
+						$token,
+						$get( 'recaptcha_v2_secret_key' )
+					);
+					break;
+			}
+
+			if ( ! $verified ) {
+				return new WP_Error(
+					'captcha_failed',
+					esc_html__( 'Captcha verification failed. Please try again.', 'surveyx-builder' ),
+					[ 'status' => 403 ]
+				);
+			}
+
+			return true;
 		}
 
 		/**
@@ -183,14 +303,10 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				return [];
 			}
 
-			$filtered = array_values(
-				array_filter(
-					$survey_data['responses'],
-					function ( $data ) use ( $respondent_id ) {
-						return $data->respondent_id === $respondent_id;
-					}
-				)
-			);
+			// Responses are already scoped to this respondent by the
+			// get_survey_init_data() query (WHERE respondent_id = %s), so no PHP
+			// re-filter is needed — just normalise to sequential keys.
+			$filtered = array_values( $survey_data['responses'] );
 
 			// Remove only respondent_id (sensitive), keep response_content for restoring answers
 			foreach ( $filtered as $vote ) {

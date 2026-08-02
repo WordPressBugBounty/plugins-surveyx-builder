@@ -60,6 +60,10 @@ if ( ! class_exists( 'SurveyX_API_Handler', false ) ) {
 							'required'          => false,
 							'sanitize_callback' => 'sanitize_text_field',
 						],
+						'captcha_token' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 					],
 				]
 			);

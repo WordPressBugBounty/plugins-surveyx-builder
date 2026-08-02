@@ -124,7 +124,9 @@ class SurveyX_Revisions {
 
 		// Skip if too recent
 		if ( $last_snapshot_time ) {
-			$diff = time() - strtotime( $last_snapshot_time );
+			// Parse the stored value as UTC explicitly (it is always UTC), rather than
+			// relying on WP having set PHP's default timezone to UTC.
+			$diff = time() - strtotime( $last_snapshot_time . ' UTC' );
 			if ( $diff < self::SNAPSHOT_INTERVAL ) {
 				return;
 			}
@@ -232,7 +234,7 @@ class SurveyX_Revisions {
 
 		$is_newer = false;
 		if ( $last_updated_at ) {
-			$is_newer = strtotime( $latest->created_at ) > strtotime( $last_updated_at );
+			$is_newer = strtotime( $latest->created_at . ' UTC' ) > strtotime( $last_updated_at . ' UTC' );
 		} else {
 			$is_newer = true;
 		}
@@ -268,12 +270,15 @@ class SurveyX_Revisions {
 			return 0;
 		}
 
-		// $placeholders contains only %d format specifiers, safely generated
+		// $placeholders is a run of %d specifiers, one per (int-cast) id, so the IN()
+		// list is bound through prepare() rather than interpolated as raw values.
+		$keep_ids     = array_map( 'absint', $keep_ids );
 		$placeholders = implode( ',', array_fill( 0, count( $keep_ids ), '%d' ) );
 
 		$params = array_merge( [ $survey_id ], $keep_ids );
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
+		// IN() placeholders are bound via prepare(); table is a trusted $wpdb->prefix identifier.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
 		return $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->prefix}surveyx_revisions
@@ -283,6 +288,7 @@ class SurveyX_Revisions {
 				...$params
 			)
 		) ?: 0;
+		// phpcs:enable
 	}
 
 	/**
@@ -306,17 +312,14 @@ class SurveyX_Revisions {
 	}
 
 	/**
-	 * Delete all revisions for a survey
-	 */
-	public static function delete_all_revisions( $survey_id ) {
-		global $wpdb;
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
-		return $wpdb->delete( self::get_table_name(), [ 'survey_id' => $survey_id ], [ '%d' ] );
-	}
-
-	/**
-	 * Update temp IDs to real IDs in all revisions for a survey
-	 * Uses string replacement for efficiency - replaces all occurrences in JSON
+	 * Update temp IDs to real IDs in all revisions for a survey.
+	 *
+	 * Decodes each revision blob, walks it, and remaps only the values that exactly
+	 * equal a generated temp-id token (question/answer ids and any nested reference to
+	 * them, e.g. skip-logic jump targets), then re-encodes. This replaced a blind
+	 * str_replace over the raw JSON so a temp-id token that happens to appear inside
+	 * user content (a title or label) can no longer be corrupted, while still covering
+	 * every id-bearing field the previous approach did.
 	 *
 	 * @param int   $survey_id  Survey ID
 	 * @param array $id_mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
@@ -331,28 +334,21 @@ class SurveyX_Revisions {
 			return 0;
 		}
 
-		// Build search/replace arrays for all IDs
-		$search  = [];
-		$replace = [];
-
-		// Add question ID mappings (replace "temp-xxx" with real ID as string)
-		if ( ! empty( $id_mapping['questions'] ) ) {
-			foreach ( $id_mapping['questions'] as $temp_id => $real_id ) {
-				// Match both "id":"temp-xxx" and "question_id":"temp-xxx"
-				$search[]  = '"' . $temp_id . '"';
-				$replace[] = '"' . $real_id . '"';
+		// One temp-id => real-id lookup covering both questions and answers. Temp ids
+		// are globally unique so the union is unambiguous. Values are cast to string to
+		// keep the id shape the editor already stores (the old str_replace also wrote
+		// the real id back as a quoted string).
+		$map = [];
+		foreach ( [ 'questions', 'answers' ] as $group ) {
+			if ( empty( $id_mapping[ $group ] ) ) {
+				continue;
+			}
+			foreach ( $id_mapping[ $group ] as $temp_id => $real_id ) {
+				$map[ (string) $temp_id ] = (string) $real_id;
 			}
 		}
 
-		// Add answer ID mappings
-		if ( ! empty( $id_mapping['answers'] ) ) {
-			foreach ( $id_mapping['answers'] as $temp_id => $real_id ) {
-				$search[]  = '"' . $temp_id . '"';
-				$replace[] = '"' . $real_id . '"';
-			}
-		}
-
-		if ( empty( $search ) ) {
+		if ( empty( $map ) ) {
 			return 0;
 		}
 
@@ -368,15 +364,22 @@ class SurveyX_Revisions {
 		$updated_count = 0;
 
 		foreach ( $revisions as $rev ) {
-			$original_data = $rev->data;
-			$updated_data  = str_replace( $search, $replace, $original_data );
+			$decoded = json_decode( $rev->data, true );
+
+			// Leave anything that isn't a decodable structure untouched.
+			if ( ! is_array( $decoded ) ) {
+				continue;
+			}
+
+			$changed  = false;
+			$remapped = self::remap_ids( $decoded, $map, $changed );
 
 			// Only update if something changed
-			if ( $updated_data !== $original_data ) {
+			if ( $changed ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 				$wpdb->update(
 					$table,
-					[ 'data' => $updated_data ],
+					[ 'data' => wp_json_encode( $remapped ) ],
 					[ 'id' => $rev->id ],
 					[ '%s' ],
 					[ '%d' ]
@@ -386,5 +389,33 @@ class SurveyX_Revisions {
 		}
 
 		return $updated_count;
+	}
+
+	/**
+	 * Recursively remaps scalar id values inside a decoded revision structure.
+	 *
+	 * Only string values that EXACTLY equal a temp-id token are replaced, so id
+	 * fields (and nested references to them) are remapped while free text is left
+	 * alone. $changed is set true when at least one value was replaced.
+	 *
+	 * @param mixed  $data    Decoded value (array/scalar).
+	 * @param array  $map     temp_id => real_id lookup.
+	 * @param bool   $changed Set by reference when a replacement occurs.
+	 * @return mixed The remapped value.
+	 */
+	private static function remap_ids( $data, $map, &$changed ) {
+		if ( is_array( $data ) ) {
+			foreach ( $data as $key => $value ) {
+				$data[ $key ] = self::remap_ids( $value, $map, $changed );
+			}
+			return $data;
+		}
+
+		if ( is_string( $data ) && isset( $map[ $data ] ) ) {
+			$changed = true;
+			return $map[ $data ];
+		}
+
+		return $data;
 	}
 }

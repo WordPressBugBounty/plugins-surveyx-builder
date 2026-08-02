@@ -4,7 +4,7 @@ Tags: poll, survey, quiz, form, feedback
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -151,6 +151,21 @@ Visit the [WordPress support forum](https://wordpress.org/support/plugin/surveyx
 Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to contribute.
 
 == Changelog ==
+
+= 1.7.0 =
+* Added: Survey image size option (Settings > Appearance) to reduce image weight and speed up page load, with automatic fallback to the full size image when needed
+* Improved: Frontend no longer loads admin-only code or unused libraries, resulting in lighter and faster public surveys
+* Improved: Reduced database queries when loading a survey and submitting answers
+* Improved: Lighter admin builder assets for faster loading
+* Improved: Redesigned captcha screen with a clearer prompt and description
+* Improved: Captcha widget now follows the survey light/dark theme
+* Improved: Create Survey wizard now supports browser Back navigation, swipe gestures, and Esc to close
+* Fixed: Surveys created with the Pro version are now protected from being edited or overwritten in the free version, with an upgrade notice shown instead
+* Fixed: Creating a survey now opens the editor directly instead of returning to the dashboard
+* Fixed: Free/Pro filter on the Templates page not clickable
+* Fixed: Embed dialog "Copy" button now resets when the survey size changes, so the current shortcode is copied
+* Fixed: Captcha verification prompt not appearing before the survey
+* Fixed: Console warnings during captcha retries
 
 = 1.6.0 =
 * Improved: Database performance with composite indexes for faster queries

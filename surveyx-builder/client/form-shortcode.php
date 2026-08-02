@@ -20,13 +20,6 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 		private static $instance;
 		public const PREFIX = 'surveyx-';
 
-		/**
-		 * Stores survey IDs found on the page for batch fetching
-		 *
-		 * @var array
-		 */
-		private static $survey_ids = [];
-
 		public static function get_instance() {
 			if ( null === self::$instance ) {
 				self::$instance = new self();
@@ -54,8 +47,8 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 			wp_register_style( self::PREFIX . 'client', SURVEYX_URL . 'assets/client/style.min.css', [], SURVEYX_VERSION );
 
 			// Register scripts (captcha scripts are loaded dynamically in Vue component)
-			wp_register_script( self::PREFIX . 'vendor', SURVEYX_URL . 'assets/vendor/bundle.js', [], SURVEYX_VERSION, true );
-			wp_register_script( self::PREFIX . 'client', SURVEYX_URL . 'assets/client/bundle.js', [ 'wp-i18n', self::PREFIX . 'vendor' ], SURVEYX_VERSION, true );
+			wp_register_script( self::PREFIX . 'vendor-client', SURVEYX_URL . 'assets/vendor-client/bundle.js', [], SURVEYX_VERSION, true );
+			wp_register_script( self::PREFIX . 'client', SURVEYX_URL . 'assets/client/bundle.js', [ 'wp-i18n', self::PREFIX . 'vendor-client' ], SURVEYX_VERSION, true );
 
 			// Load JavaScript translations
 			wp_set_script_translations( self::PREFIX . 'client', 'surveyx-builder' );
@@ -79,27 +72,21 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				$this->register_scripts();
 			}
 
-			// Track survey ID for multi-shortcode pages
-			$survey_id = absint( $attr['id'] ?? 0 );
-
-			if ( $survey_id && ! in_array( $survey_id, self::$survey_ids, true ) ) {
-				self::$survey_ids[] = $survey_id;
-			}
-
 			// Only configure once (wp_localize_script can only be called once per script handle)
 			if ( ! wp_script_is( self::PREFIX . 'client', 'done' ) ) {
 				// Get captcha info
 				$settings     = SurveyX_Db::get_settings();
 				$captcha_info = SurveyX_Captcha_Helpers::get_active_captcha( $settings );
 
-				// Check if ANY survey on page requires login
-				$nonce = $this->get_rest_nonce_for_page();
-
+				// NOTE: The REST nonce is intentionally NOT embedded here. A per-user nonce
+				// baked into shortcode HTML breaks under full-page caching (one user's nonce
+				// gets served to everyone). Login-required surveys instead receive a fresh,
+				// always-correct nonce via the POST /init response (`rest_nonce`), which is
+				// never page-cached. This keeps the shortcode HTML fully generic/cache-safe.
 				$config = [
 					'apiUrl'         => esc_url_raw( rest_url( 'surveyx/v1' ) ),
 					'captchaType'    => $captcha_info['type'] ?? 'none',
 					'captchaSiteKey' => $captcha_info['site_key'] ?? '',
-					'restNonce'      => $nonce,
 				];
 
 				wp_localize_script( self::PREFIX . 'client', 'surveyxConfigs', $config );
@@ -110,36 +97,6 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 			}
 
 			return $output;
-		}
-
-		/**
-		 * Get REST API nonce if ANY survey on page requires login.
-		 * Checks all tracked survey IDs and generates nonce if at least one requires authentication.
-		 *
-		 * @return string|null Nonce if any survey requires login, null otherwise.
-		 */
-		private function get_rest_nonce_for_page() {
-			if ( empty( self::$survey_ids ) ) {
-				return null;
-			}
-
-			// Check if ANY survey on the page requires login
-			foreach ( self::$survey_ids as $survey_id ) {
-				$survey_settings = SurveyX_Db::get_survey_settings( $survey_id );
-
-				if ( is_null( $survey_settings ) ) {
-					continue;
-				}
-
-				$require_logged_in = ! empty( $survey_settings['require_logged_in'] );
-
-				if ( $require_logged_in ) {
-					// At least one survey requires login, generate nonce
-					return wp_create_nonce( 'wp_rest' );
-				}
-			}
-
-			return null;
 		}
 
 		/**
@@ -171,8 +128,11 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return '';
 			}
 
+			// Fetch the survey row once (memoized) — covers existence, mode and settings.
+			$render_row = SurveyX_Db::get_survey_render_row( $survey_id );
+
 			// Check if survey exists
-			if ( ! SurveyX_Db::survey_exists( $survey_id ) ) {
+			if ( is_null( $render_row ) ) {
 				if ( current_user_can( 'manage_options' ) ) {
 					return self::render_notice(
 						esc_html__( 'Survey Not Found', 'surveyx-builder' ),
@@ -188,7 +148,7 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 			}
 
 			// Check if pro survey but free version is active
-			$survey_mode = SurveyX_Db::get_survey_mode( $survey_id );
+			$survey_mode = $render_row->s_mode;
 			if ( 'pro' === $survey_mode && current_user_can( 'manage_options' ) ) {
 				return self::render_notice(
 					esc_html__( 'Pro Survey', 'surveyx-builder' ),
@@ -197,7 +157,7 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 			}
 
 			// Get survey settings to determine theme
-			$survey_settings = SurveyX_Db::get_survey_settings( $survey_id );
+			$survey_settings = $render_row->settings;
 
 			// Check if survey settings could be retrieved
 			if ( is_null( $survey_settings ) ) {
@@ -240,9 +200,13 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return '';
 			}
 
-			$edit_url = admin_url( 'admin.php?page=surveyx#/survey/' . $survey_id . '/general' );
+			$edit_url      = admin_url( 'admin.php?page=surveyx#/survey/' . $survey_id . '/general' );
+			$analytics_url = admin_url( 'admin.php?page=surveyx#/survey/' . $survey_id . '/analytics' );
 
 			$output  = '<div class="surveyx-edit-links">';
+			$output .= '<a href="' . esc_url( $analytics_url ) . '" target="_blank" rel="noopener" class="surveyx-edit-btn surveyx-edit-btn--icon" title="' . esc_attr__( 'View Analytics', 'surveyx-builder' ) . '" aria-label="' . esc_attr__( 'View Analytics', 'surveyx-builder' ) . '">';
+			$output .= '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
+			$output .= '</a>';
 			$output .= '<a href="' . esc_url( $edit_url ) . '" target="_blank" rel="noopener" class="surveyx-edit-btn">';
 			$output .= '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 			$output .= '<span>' . esc_html__( 'Edit Survey', 'surveyx-builder' ) . '</span>';
@@ -263,10 +227,10 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 			return sprintf(
 				'<div class="surveyx-notice">
                     <div class="surveyx-notice-content">
-                        <svg class="surveyx-notice-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        <svg class="surveyx-notice-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 17V11"></path>
+                            <path d="M22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C21.5093 4.43821 21.8356 5.80655 21.9449 8"></path>
+                            <path d="M12 8H12.0001"></path>
                         </svg>
                         <div class="surveyx-notice-body">
                             <h4 class="surveyx-notice-title">%s</h4>

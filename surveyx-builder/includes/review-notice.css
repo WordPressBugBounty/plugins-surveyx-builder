@@ -1,0 +1,95 @@
+/**
+ * SurveyX review-request admin notice.
+ * Enqueued by includes/review-notice.php on admin pages when the notice shows.
+ */
+.surveyx-review-notice.notice {
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.surveyx-review__inner {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px 14px;
+}
+
+.surveyx-review__body {
+  border-left: 1px solid #8882;
+  padding-left: 14px;
+}
+
+.surveyx-review__logo {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #000, #3595ff);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.surveyx-review__logo svg {
+  display: block;
+}
+
+.surveyx-review__title {
+  margin: 2px 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.surveyx-review__text {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #50575e;
+  max-width: 660px;
+}
+
+.surveyx-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+}
+
+.surveyx-review__btn.button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  padding: 6px 14px;
+  line-height: 1.4;
+  background: var(--sx-primary, #0b7cff);
+  border-color: var(--sx-primary, #0b7cff);
+  color: #fff;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.surveyx-review__btn.button-primary:hover,
+.surveyx-review__btn.button-primary:focus {
+  background: var(--sx-primary, #0b7cff);
+  border-color: var(--sx-primary, #0b7cff);
+  color: #fff;
+  filter: brightness(0.94);
+}
+
+svg.surveyx-review__btn-icon {
+  flex-shrink: 0;
+  display: block;
+  width: 1em !important;
+}
+
+.surveyx-review__link {
+  text-decoration: none;
+  font-size: 13px;
+  color: var(--sx-primary, #0b7cff);
+}
+
+.surveyx-review__link--muted {
+  color: #787c82;
+}

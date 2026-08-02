@@ -6,13 +6,81 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 	class SurveyX_Captcha_Helpers {
 
 		/**
+		 * Captcha providers supported by the FREE plugin.
+		 * The free version only supports reCAPTCHA v2; it must never resolve to
+		 * reCAPTCHA v3 or Turnstile even if `captcha_provider` requests them.
+		 *
+		 * @return string[] Supported provider identifiers.
+		 */
+		protected static function get_supported_providers() {
+			return [ 'recaptcha_v2' ];
+		}
+
+		/**
 		 * Determines which captcha type should be used based on settings.
+		 *
+		 * Resolution order:
+		 * 1. If `captcha_provider` is set (new source of truth), resolve from it —
+		 *    the provider must be supported by this version AND have both keys.
+		 * 2. Backward compat: if `captcha_provider` is unset/empty (old installs),
+		 *    fall back to the legacy `*_enabled` + keys priority logic.
 		 *
 		 * @param object|array $settings Settings object or array.
 		 *
+		 * @return array {
+		 *     @type string $type     Captcha type: 'none' or 'recaptcha_v2'.
+		 *     @type string $site_key Site key for the selected captcha.
 		 * }
 		 */
 		public static function get_active_captcha( $settings ) {
+			$provider = trim( (string) self::get_setting_value( $settings, 'captcha_provider' ) );
+
+			if ( '' !== $provider ) {
+				return self::resolve_provider( $settings, $provider );
+			}
+
+			return self::resolve_legacy_captcha( $settings );
+		}
+
+		/**
+		 * Resolves a captcha from the explicit `captcha_provider` setting.
+		 *
+		 * @param object|array $settings Settings.
+		 * @param string       $provider Requested provider identifier.
+		 *
+		 * @return array Resolved captcha array (type + site_key).
+		 */
+		protected static function resolve_provider( $settings, $provider ) {
+			$none = [
+				'type'     => 'none',
+				'site_key' => '',
+			];
+
+			if ( ! in_array( $provider, self::get_supported_providers(), true ) ) {
+				return $none;
+			}
+
+			$site_key   = self::get_setting_value( $settings, $provider . '_site_key' );
+			$secret_key = self::get_setting_value( $settings, $provider . '_secret_key' );
+
+			if ( empty( $site_key ) || empty( $secret_key ) ) {
+				return $none;
+			}
+
+			return [
+				'type'     => $provider,
+				'site_key' => $site_key,
+			];
+		}
+
+		/**
+		 * Legacy resolver based on the `*_enabled` flags (backward compat).
+		 *
+		 * @param object|array $settings Settings.
+		 *
+		 * @return array Resolved captcha array (type + site_key).
+		 */
+		protected static function resolve_legacy_captcha( $settings ) {
 			// Check reCAPTCHA v2
 			$recaptcha_enabled    = self::get_setting_value( $settings, 'recaptcha_v2_enabled' );
 			$recaptcha_site_key   = self::get_setting_value( $settings, 'recaptcha_v2_site_key' );

@@ -26,15 +26,6 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 		const TRANSIENT_EXPIRY = 30;
 
 		/**
-		 * Generate unique import ID.
-		 *
-		 * @return string Unique import ID.
-		 */
-		public static function generate_import_id() {
-			return wp_generate_uuid4();
-		}
-
-		/**
 		 * Update import progress in transient.
 		 *
 		 * @param string $import_id Import ID.
@@ -58,23 +49,14 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 		}
 
 		/**
-		 * Delete import progress transient.
-		 *
-		 * @param string $import_id Import ID.
-		 * @return bool True on success.
-		 */
-		public static function delete_progress( $import_id ) {
-			return delete_transient( self::TRANSIENT_PREFIX . $import_id );
-		}
-
-		/**
 		 * Process template import with progress tracking.
 		 *
 		 * @param string $import_id Import ID for tracking.
 		 * @param string $template_id Template ID from remote server.
+		 * @param string $title_override Optional title to override the template's own title.
 		 * @return array Result with survey_id on success or error.
 		 */
-		public static function process_import( $import_id, $template_id ) {
+		public static function process_import( $import_id, $template_id, $title_override = '' ) {
 			try {
 				// Step 1: Get template data from cache or fetch from server
 				$template_data = self::get_template_data( $import_id, $template_id );
@@ -90,6 +72,9 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 					);
 					return [ 'error' => $template_data->get_error_message() ];
 				}
+
+				// Optionally strip question cover images before any media is sideloaded.
+				$template_data = self::maybe_strip_question_covers( $template_data );
 
 				// Step 2: Import ALL media (including theme background_image)
 				$processed_data = self::import_media( $import_id, $template_data );
@@ -110,7 +95,7 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 				$processed_data = apply_filters( 'surveyx_import_processed_data', $processed_data, $import_id );
 
 				// Step 4: Import to database
-				$result = self::import_to_database( $import_id, $processed_data );
+				$result = self::import_to_database( $import_id, $processed_data, $title_override );
 
 				if ( is_wp_error( $result ) ) {
 					self::update_progress(
@@ -327,6 +312,46 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 		}
 
 		/**
+		 * Strip question cover images from the import payload when enabled.
+		 *
+		 * Default-ON option (`skip_question_cover_import`) that removes each question's
+		 * cover image before media sideload, so imports run faster and are more stable
+		 * (fewer remote downloads that can stall). Only question covers are touched:
+		 * the survey cover and answer-choice images are left untouched.
+		 *
+		 * @param array $data Import payload ({ survey, questions, answers }).
+		 * @return array Payload with question cover keys removed when the option is on.
+		 */
+		private static function maybe_strip_question_covers( $data ) {
+			$settings = SurveyX_Admin_Db::get_settings();
+
+			if ( empty( $settings['skip_question_cover_import'] ) ) {
+				return $data;
+			}
+
+			if ( empty( $data['questions'] ) || ! is_array( $data['questions'] ) ) {
+				return $data;
+			}
+
+			foreach ( $data['questions'] as &$question ) {
+				if ( ! isset( $question['content'] ) || ! is_array( $question['content'] ) ) {
+					continue;
+				}
+
+				unset(
+					$question['content']['image_url'],
+					$question['content']['image_id'],
+					$question['content']['image_w'],
+					$question['content']['image_h'],
+					$question['content']['image_alt']
+				);
+			}
+			unset( $question );
+
+			return $data;
+		}
+
+		/**
 		 * Import media files with progress tracking.
 		 *
 		 * @param string $import_id Import ID.
@@ -376,11 +401,24 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 
 			require_once SURVEYX_PATH . 'admin/media-helpers.php';
 
-			// Process each image
-			$url_mapping = [];
-			$current     = 0;
+			// Process each image with a short per-image timeout and a cumulative
+			// wall-clock budget, so a few stalled remote images can never hang the
+			// whole import. Any images left after the budget expires keep their
+			// original remote URLs and the survey still imports.
+			$url_mapping   = [];
+			$current       = 0;
+			$skipped       = 0;
+			$image_timeout = 15; // Per-image timeout (seconds) for HEAD + download.
+			$time_budget   = 45; // Cumulative budget (seconds) for all media.
+			$start         = microtime( true );
 
 			foreach ( $external_images as $image_info ) {
+				// Stop sideloading once the cumulative budget is exceeded.
+				if ( microtime( true ) - $start > $time_budget ) {
+					$skipped = $total_images - $current;
+					break;
+				}
+
 				++$current;
 				$url = $image_info['url'];
 
@@ -395,8 +433,8 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 					]
 				);
 
-				// Upload the image
-				$result = SurveyX_Media_Helper::upload_image( $url );
+				// Upload the image with a short timeout so a stalled connection fails fast.
+				$result = SurveyX_Media_Helper::upload_image( $url, '', $image_timeout );
 
 				if ( ! is_wp_error( $result ) ) {
 					$url_mapping[ $url ] = [
@@ -410,18 +448,33 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 				}
 			}
 
+			if ( $skipped > 0 ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Intentional error logging
+				error_log( sprintf( 'SurveyX Import: Media time budget (%1$ds) exceeded, skipped %2$d remaining image(s); their original remote URLs are kept.', $time_budget, $skipped ) );
+			}
+
 			// Replace URLs in data
 			$processed_data = self::replace_urls_in_data( $data, $url_mapping );
+
+			$complete_message = sprintf(
+				/* translators: %d: number of media files */
+				esc_html__( 'Media import complete (%d files).', 'surveyx-builder' ),
+				count( $url_mapping )
+			);
+			if ( $skipped > 0 ) {
+				$complete_message = sprintf(
+					/* translators: 1: number of imported files, 2: number of skipped files */
+					esc_html__( 'Media import finished (%1$d imported, %2$d skipped).', 'surveyx-builder' ),
+					count( $url_mapping ),
+					$skipped
+				);
+			}
 
 			self::update_progress(
 				$import_id,
 				[
 					'progress' => 60,
-					'message'  => sprintf(
-						/* translators: %d: number of media files */
-						esc_html__( 'Media import complete (%d files).', 'surveyx-builder' ),
-						count( $url_mapping )
-					),
+					'message'  => $complete_message,
 				]
 			);
 
@@ -465,9 +518,10 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 		 *
 		 * @param string $import_id Import ID.
 		 * @param array  $data Processed template data.
+		 * @param string $title_override Optional title to override the template's own title.
 		 * @return array|WP_Error Result with survey_id or error.
 		 */
-		private static function import_to_database( $import_id, $data ) {
+		private static function import_to_database( $import_id, $data, $title_override = '' ) {
 			self::update_progress(
 				$import_id,
 				[
@@ -480,6 +534,11 @@ if ( ! class_exists( 'SurveyX_Import_Handler' ) ) {
 			$questions   = is_array( $data['questions'] ?? null ) ? $data['questions'] : [];
 			$answers     = is_array( $data['answers'] ?? null ) ? $data['answers'] : [];
 			$survey_data = is_array( $data['survey'] ?? null ) ? $data['survey'] : [];
+
+			// Apply the optional title override before creating the survey row.
+			if ( '' !== $title_override ) {
+				$survey_data['title'] = $title_override;
+			}
 
 			if ( empty( $survey_data ) || empty( $survey_data['title'] ) ) {
 				return new WP_Error( 'invalid_data', esc_html__( 'Invalid template data for importing.', 'surveyx-builder' ) );

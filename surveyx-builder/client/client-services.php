@@ -87,10 +87,12 @@ if ( ! class_exists( 'SurveyX_Client_Services', false ) ) {
 				);
 			}
 
-			// Check if view votes in results is enabled for this survey
+			// Check if view votes in results is enabled AND this is a vote survey.
+			// Guard against a stale flag left over from a survey_type change.
 			$settings           = $survey->settings ?? [];
 			$view_votes_enabled = $settings['view_votes_in_results'] ?? false;
-			if ( ! $view_votes_enabled ) {
+			$is_vote_survey     = ( $survey->survey_type ?? '' ) === 'vote';
+			if ( ! $view_votes_enabled || ! $is_vote_survey ) {
 				return new WP_REST_Response(
 					[ 'message' => esc_html__( 'Vote results are not enabled for this survey.', 'surveyx-builder' ) ],
 					403
@@ -99,16 +101,9 @@ if ( ! class_exists( 'SurveyX_Client_Services', false ) ) {
 
 			$result = SurveyX_Db::get_answer_total_vote( $survey_id );
 
-			if ( ! $result ) {
-				return new WP_REST_Response(
-					[
-						'message' => esc_html__( 'Failed to get total votes', 'surveyx-builder' ),
-					],
-					500
-				);
-			}
-
-			return new WP_REST_Response( [ 'data' => $result ], 200 );
+			// A survey with no votes yet (or one just reset via Allow Revote on Update) is a
+			// valid empty state, not a server error — return an empty array, not a 500.
+			return new WP_REST_Response( [ 'data' => $result ? $result : [] ], 200 );
 		}
 
 		/**

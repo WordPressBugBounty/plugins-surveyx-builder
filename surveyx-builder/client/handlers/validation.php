@@ -51,13 +51,22 @@ if ( ! class_exists( 'SurveyX_Validation_Helper', false ) ) {
 		 * Validates that answer IDs belong to the given question.
 		 * Limits answer IDs to maximum_votes setting.
 		 *
-		 * @param array $answer_ids  Array of answer IDs to validate.
-		 * @param int   $question_id The question ID.
+		 * @param array      $answer_ids       Array of answer IDs to validate.
+		 * @param int        $question_id      The question ID.
+		 * @param array|null $question_content Already-loaded question content; re-queried only when null.
 		 * @return array Validated and limited answer IDs.
 		 */
-		public static function validate_answer_ids( $answer_ids, $question_id ) {
-			$question_content = SurveyX_Db::get_question_content( $question_id );
-			$maximum_votes    = absint( $question_content['maximum_votes'] ?? 1 );
+		public static function validate_answer_ids( $answer_ids, $question_id, $question_content = null ) {
+			if ( ! is_array( $question_content ) ) {
+				$question_content = SurveyX_Db::get_question_content( $question_id );
+			}
+			$maximum_votes = absint( $question_content['maximum_votes'] ?? 1 );
+			// A stored '', 0, or '0' passes the ?? guard but yields 0 → without this
+			// clamp array_slice would drop every answer. Mirror the frontend, which
+			// uniformly uses `maximum_votes || 1` (0/empty = single-select).
+			if ( $maximum_votes < 1 ) {
+				$maximum_votes = 1;
+			}
 
 			if ( count( $answer_ids ) <= $maximum_votes ) {
 				return $answer_ids;
@@ -131,6 +140,60 @@ if ( ! class_exists( 'SurveyX_Validation_Helper', false ) ) {
 					[ 'status' => 400 ]
 				);
 			}
+
+			return true;
+		}
+
+		/**
+		 * Resolve the client IP for rate limiting.
+		 *
+		 * @return string Sanitized IP address, or empty string when unavailable.
+		 */
+		public static function get_client_ip() {
+			if ( empty( $_SERVER['REMOTE_ADDR'] ) ) {
+				return '';
+			}
+
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+
+			return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+		}
+
+		/**
+		 * Lightweight per-respondent/per-IP rate limiter for public endpoints.
+		 *
+		 * Uses a short-window transient counter (no DB table). Sized for burst
+		 * protection only, so it does not block legitimate survey taking.
+		 *
+		 * Write cost: the counter is written at most `$limit` times per window — once
+		 * an IP/respondent reaches the limit the over-limit branch returns before any
+		 * write, so a sustained burst does NOT keep hammering the store. On plain
+		 * installs each under-limit write is a wp_options upsert; installing a
+		 * persistent object cache (Redis/Memcached) turns these into in-memory writes
+		 * and is the recommended way to eliminate the remaining DB cost.
+		 *
+		 * @param string $bucket        Endpoint bucket name (e.g. 'init', 'progress').
+		 * @param string $respondent_id Respondent UUID ('' when not yet assigned).
+		 * @param int    $limit         Max requests allowed within the window.
+		 * @param int    $window        Window length in seconds.
+		 * @return true|WP_Error True if under the limit, WP_Error (429) if exceeded.
+		 */
+		public static function check_rate_limit( $bucket, $respondent_id = '', $limit = 30, $window = 60 ) {
+			$ip  = self::get_client_ip();
+			$key = 'sx_rl_' . md5( $bucket . '|' . (string) $respondent_id . '|' . $ip );
+
+			$count = (int) get_transient( $key );
+
+			// Over the limit: bail before writing, so a sustained burst adds no writes.
+			if ( $count >= $limit ) {
+				return new WP_Error(
+					'rate_limited',
+					esc_html__( 'Too many requests. Please slow down and try again shortly.', 'surveyx-builder' ),
+					[ 'status' => 429 ]
+				);
+			}
+
+			set_transient( $key, $count + 1, $window );
 
 			return true;
 		}

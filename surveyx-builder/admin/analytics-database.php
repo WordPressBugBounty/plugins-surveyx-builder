@@ -55,6 +55,10 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 			// Get text response counts (counts only, no content - for fast initial load)
 			$text_response_counts = self::get_text_response_counts( $survey_id );
 
+			// Distinct respondents who answered each question — for a participation-based
+			// response rate that stays <= 100% (summing multi-select votes can exceed it).
+			$answered_count_by_question = self::get_answered_respondent_counts( $survey_id );
+
 			$data = [
 				'questions'                  => $questions,
 				'answers'                    => $answers,
@@ -62,6 +66,7 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				'seen_count_by_question'     => $seen_count_by_question,
 				'dropoff_by_question'        => $dropoff_by_question,
 				'response_count_by_question' => $response_count_by_question,
+				'answered_count_by_question' => $answered_count_by_question,
 				'scale_responses'            => $scale_responses,
 				'text_response_counts'       => $text_response_counts,
 			];
@@ -253,6 +258,36 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 		}
 
 		/**
+		 * Count DISTINCT respondents who answered each question (not total votes).
+		 * Powers a participation-based response rate that never exceeds 100%,
+		 * unlike summing multi-select answer votes.
+		 *
+		 * @param int $survey_id Survey ID.
+		 * @return array question_id => distinct answered-respondent count.
+		 */
+		protected static function get_answered_respondent_counts( int $survey_id ) {
+			global $wpdb;
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT question_id, COUNT(DISTINCT session_id) as count
+                    FROM {$wpdb->prefix}surveyx_responses
+                    WHERE survey_id = %d AND response_status = 'answered'
+                    GROUP BY question_id",
+					$survey_id
+				)
+			);
+
+			$counts = [];
+			foreach ( $results as $row ) {
+				$counts[ (string) $row->question_id ] = (int) $row->count;
+			}
+
+			return $counts;
+		}
+
+		/**
 		 * Get scale/rating responses.
 		 * Base implementation returns empty array. Extended via filter.
 		 *
@@ -277,17 +312,19 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return [];
 			}
 
-			// Base type map (extendable via filter)
-			$type_map = [
-				-2 => 'text_input',
-				0  => 'other',
-			];
-			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
+			$type_map = SurveyX_Response_Types::text_response_type_map();
 
-			$answer_ids   = array_keys( $type_map );
+			$answer_ids = array_map( 'intval', array_keys( $type_map ) );
+			if ( empty( $answer_ids ) ) {
+				return [];
+			}
+
+			// $placeholders is a run of %d specifiers, one per (int-cast) answer id, so
+			// the IN() list is bound through prepare() rather than interpolated raw.
 			$placeholders = implode( ',', array_fill( 0, count( $answer_ids ), '%d' ) );
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// IN() placeholders are bound via prepare(); table is a trusted $wpdb->prefix identifier.
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
 			$results = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT question_id, answer_id, COUNT(*) as count
@@ -299,6 +336,7 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 					array_merge( [ $survey_id ], $answer_ids )
 				)
 			);
+			// phpcs:enable
 
 			// Transform to { question_id => { type => count } }
 			$counts = [];
@@ -344,12 +382,7 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return [];
 			}
 
-			// Base type map: answer_id => type_name (extendable via filter)
-			$type_map = [
-				-2 => 'text_input',
-				0  => 'other',
-			];
-			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
+			$type_map = SurveyX_Response_Types::text_response_type_map();
 
 			// Find answer_id for the requested type
 			$answer_id = array_search( $answer_type, $type_map, true );
@@ -395,12 +428,7 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return 0;
 			}
 
-			// Base type map: answer_id => type_name (extendable via filter)
-			$type_map = [
-				-2 => 'text_input',
-				0  => 'other',
-			];
-			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
+			$type_map = SurveyX_Response_Types::text_response_type_map();
 
 			// Find answer_id for the requested type
 			$answer_id = array_search( $answer_type, $type_map, true );

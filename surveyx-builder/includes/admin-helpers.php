@@ -36,74 +36,6 @@ if ( ! class_exists( 'SurveyX_Admin_Helpers', false ) ) {
 		];
 
 		/**
-		 * Checks if reCAPTCHA v2 is available based on the presence of site key.
-		 *
-		 * @param object|array $settings Settings object or array.
-		 *
-		 * @return bool True if reCAPTCHA v2 is available (site key present).
-		 */
-		public static function is_recaptcha_v2_available( $settings ) {
-			if ( is_object( $settings ) ) {
-				return ! empty( $settings->recaptcha_v2_site_key );
-			}
-
-			if ( is_array( $settings ) ) {
-				return ! empty( $settings['recaptcha_v2_site_key'] );
-			}
-
-			return false;
-		}
-
-		/**
-		 * Validates settings for incomplete required fields.
-		 * Only validates fields that have data - ignores enabled flags.
-		 * This allows toggling features on/off without validation errors.
-		 *
-		 * @param array $settings Settings array to validate.
-		 *
-		 * @return array Array of validation errors (empty if valid).
-		 */
-		public static function validate_settings( $settings ) {
-			$errors = [];
-
-			if ( ! empty( $settings['recaptcha_v2_site_key'] ) && empty( $settings['recaptcha_v2_secret_key'] ) ) {
-				$errors['recaptcha_v2_secret_key'] = esc_html__( 'reCAPTCHA v2 Secret Key is required when Site Key is provided.', 'surveyx-builder' );
-			}
-
-			if ( ! empty( $settings['recaptcha_v2_secret_key'] ) && empty( $settings['recaptcha_v2_site_key'] ) ) {
-				$errors['recaptcha_v2_site_key'] = esc_html__( 'reCAPTCHA v2 Site Key is required when Secret Key is provided.', 'surveyx-builder' );
-			}
-
-			return $errors;
-		}
-
-		/**
-		 * Gets default settings structure.
-		 *
-		 * @return array Default settings array.
-		 */
-		public static function get_default_settings() {
-			return [
-				'recaptcha_v2_enabled'       => false,
-				'recaptcha_v2_site_key'      => '',
-				'recaptcha_v2_secret_key'    => '',
-				'turnstile_enabled'          => false,
-				'turnstile_site_key'         => '',
-				'turnstile_secret_key'       => '',
-				'email_enabled'              => false,
-				'email_address'              => '',
-				'survey_voted_email_subject' => '',
-				'survey_voted_email_title'   => '',
-				'survey_voted_email_message' => '',
-				'custom_themes'              => [],
-				'enable_branding'            => false,
-				'brand_logo_url'             => '',
-				'brand_pre_text'             => '',
-				'brand_link_url'             => '',
-			];
-		}
-
-		/**
 		 * Recursively validate and sanitize input data.
 		 *
 		 * @param mixed $data Input data to validate.
@@ -127,6 +59,14 @@ if ( ! class_exists( 'SurveyX_Admin_Helpers', false ) ) {
 
 					if ( 'status' === $key ) {
 						$validated[ $key ] = self::validate_status( $value );
+						continue;
+					}
+
+					// URL settings are rendered on the public client — run them through
+					// sanitize_url (esc_url_raw + javascript: block) instead of wp_kses,
+					// which leaves a bare "javascript:" string untouched.
+					if ( 'custom_brand_link' === $key || 'custom_brand_logo' === $key ) {
+						$validated[ $key ] = is_string( $value ) ? self::sanitize_url( $value ) : '';
 						continue;
 					}
 

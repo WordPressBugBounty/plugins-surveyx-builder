@@ -21,15 +21,72 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		}
 
 		/**
-		 * Get survey header info
-		 * Returns only: id, title, survey_type, status, dates.
+		 * Blocks editing of a Pro survey in the free version.
 		 *
-		 * @param WP_REST_Request $request The REST API request object.
-		 * @return WP_REST_Response Returns minimal survey info.
+		 * Returns a 403 response for a Pro survey (the admin app shows an upgrade
+		 * notice), or null to proceed.
+		 *
+		 * @param int $survey_id The survey ID.
+		 * @return WP_REST_Response|null
 		 */
-		public function get_survey_header_info( WP_REST_Request $request ) {
-			$body      = json_decode( $request->get_body(), true );
-			$survey_id = absint( $body['id'] ?? 0 );
+		private function block_if_pro_survey( $survey_id ) {
+			if ( 'pro' === SurveyX_Admin_Db::get_survey_mode( $survey_id ) ) {
+				return new WP_REST_Response(
+					[ 'message' => esc_html__( 'This survey uses Pro features. Please activate SurveyX Pro to edit it.', 'surveyx-builder' ) ],
+					403
+				);
+			}
+
+			return null;
+		}
+
+		/**
+		 * Parses and validates a survey REST request body, factoring out the boilerplate
+		 * repeated across the survey endpoints: decode → optional JSON guard → optional
+		 * recursive sanitize → resolve survey id → optional existence check → optional
+		 * Pro-survey block.
+		 *
+		 * @param WP_REST_Request $request The REST request.
+		 * @param array           $opts {
+		 *     Optional toggles.
+		 *
+		 *     @type string $id_key       Body key holding the survey id. Default 'id'.
+		 *     @type bool   $require_json Return 400 when the body is not valid JSON. Default false.
+		 *     @type bool   $sanitize     Recursively sanitize the body before use. Default false.
+		 *     @type bool   $check_exists Return 404 when the survey does not exist. Default true.
+		 *     @type bool   $block_pro    Return 403 for a Pro survey (free only). Default false.
+		 * }
+		 * @return array|WP_REST_Response ['survey_id' => int, 'data' => array] on success,
+		 *                                or a WP_REST_Response error to return as-is.
+		 */
+		private function parse_survey_request( WP_REST_Request $request, array $opts = [] ) {
+			$opts = array_merge(
+				[
+					'id_key'       => 'id',
+					'require_json' => false,
+					'sanitize'     => false,
+					'check_exists' => true,
+					'block_pro'    => false,
+				],
+				$opts
+			);
+
+			$body = json_decode( $request->get_body(), true );
+
+			if ( $opts['require_json'] && ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $body ) ) ) {
+				return new WP_REST_Response(
+					[ 'message' => esc_html__( 'Invalid request data.', 'surveyx-builder' ) ],
+					400
+				);
+			}
+
+			if ( ! is_array( $body ) ) {
+				$body = [];
+			}
+
+			$data = $opts['sanitize'] ? SurveyX_Admin_Helpers::recursive_sanitize( $body ) : $body;
+
+			$survey_id = absint( $data[ $opts['id_key'] ] ?? 0 );
 
 			if ( ! $survey_id ) {
 				return new WP_REST_Response(
@@ -38,12 +95,39 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 				);
 			}
 
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
+			if ( $opts['check_exists'] && ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
 				return new WP_REST_Response(
 					[ 'message' => esc_html__( 'Survey not found.', 'surveyx-builder' ) ],
 					404
 				);
 			}
+
+			if ( $opts['block_pro'] ) {
+				$blocked = $this->block_if_pro_survey( $survey_id );
+				if ( $blocked ) {
+					return $blocked;
+				}
+			}
+
+			return [
+				'survey_id' => $survey_id,
+				'data'      => $data,
+			];
+		}
+
+		/**
+		 * Get survey header info
+		 * Returns only: id, title, survey_type, status, dates.
+		 *
+		 * @param WP_REST_Request $request The REST API request object.
+		 * @return WP_REST_Response Returns minimal survey info.
+		 */
+		public function get_survey_header_info( WP_REST_Request $request ) {
+			$parsed = $this->parse_survey_request( $request, [ 'block_pro' => true ] );
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
+			}
+			$survey_id = $parsed['survey_id'];
 
 			$survey = SurveyX_Admin_Db::get_survey_by_id( $survey_id );
 
@@ -68,22 +152,11 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns full survey settings.
 		 */
 		public function get_survey_settings( WP_REST_Request $request ) {
-			$body      = json_decode( $request->get_body(), true );
-			$survey_id = absint( $body['id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request( $request, [ 'block_pro' => true ] );
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey not found.', 'surveyx-builder' ) ],
-					404
-				);
-			}
+			$survey_id = $parsed['survey_id'];
 
 			$survey = SurveyX_Admin_Db::get_survey_by_id( $survey_id );
 
@@ -101,8 +174,10 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 			// Remove settings key before merging
 			unset( $survey['settings'] );
 
-			// Merge settings into root level
-			$survey = array_merge( $survey, $settings );
+			// Merge settings into root level. Authoritative DB columns (content, status,
+			// updated_at, …) MUST win over any stale same-named key that legacy data may
+			// still carry inside the settings blob, so settings is the base and columns override.
+			$survey = array_merge( $settings, $survey );
 
 			// Ensure correct database ID
 			$survey['id'] = $survey_id;
@@ -123,22 +198,11 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns a REST response with survey data or error message.
 		 */
 		public function get_survey_editor_data( WP_REST_Request $request ) {
-			$body      = json_decode( $request->get_body(), true );
-			$survey_id = absint( $body['id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request( $request, [ 'block_pro' => true ] );
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'The survey you are looking for could not be found.', 'surveyx-builder' ) ],
-					404
-				);
-			}
+			$survey_id = $parsed['survey_id'];
 
 			$result = SurveyX_Admin_Db::get_survey_editor_data( $survey_id );
 
@@ -170,22 +234,11 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns overview data.
 		 */
 		public function get_survey_overview_data( WP_REST_Request $request ) {
-			$body      = json_decode( $request->get_body(), true );
-			$survey_id = absint( $body['id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request( $request );
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'The survey you are looking for could not be found.', 'surveyx-builder' ) ],
-					404
-				);
-			}
+			$survey_id = $parsed['survey_id'];
 
 			// Update summary if not cached (6-hour cache per survey)
 			surveyx_maybe_update_summary( $survey_id );
@@ -205,22 +258,11 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns updated overview data.
 		 */
 		public function refresh_survey_analytics_data( WP_REST_Request $request ) {
-			$body      = json_decode( $request->get_body(), true );
-			$survey_id = absint( $body['id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request( $request );
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'The survey you are looking for could not be found.', 'surveyx-builder' ) ],
-					404
-				);
-			}
+			$survey_id = $parsed['survey_id'];
 
 			// Clear cache and force update for this survey
 			delete_transient( 'surveyx_summary_' . $survey_id );
@@ -397,33 +439,34 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns a WP_REST_Response object with success or error message.
 		 */
 		public function quick_update_survey( WP_REST_Request $request ) {
-			// Decode JSON body
-			$body = json_decode( $request->get_body(), true );
-
-			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $body ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Invalid request data.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request(
+				$request,
+				[
+					'require_json' => true,
+					'sanitize'     => true,
+					'block_pro'    => true,
+				]
+			);
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
+			$survey_id = $parsed['survey_id'];
+			$data      = $parsed['data'];
 
-			// Recursively sanitize and convert all fields (strings, booleans, etc.)
-			$data = SurveyX_Admin_Helpers::recursive_sanitize( $body );
-
-			$survey_id = $data['id'] ?? 0;
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing or invalid.', 'surveyx-builder' ) ],
-					400
-				);
+			// The client posts the whole survey object (columns + decoded content merged to root).
+			// Strip DB columns / server-owned fields so the settings blob only holds real settings
+			// and never a stale copy of content/title/updated_at that would shadow the authoritative
+			// columns when get_survey_settings() merges settings back to root.
+			$settings_blob = $data;
+			foreach ( surveyx_reserved_survey_keys() as $reserved_key ) {
+				unset( $settings_blob[ $reserved_key ] );
 			}
 
 			// validated update_fields
 			$update_fields = [
 				'survey_type' => $data['survey_type'] ?? 'vote',
 				'status'      => $data['status'] ?? 'inactive',
-				'settings'    => $data,
+				'settings'    => $settings_blob,
 			];
 
 			$result = SurveyX_Admin_Db::quick_update_survey( $survey_id, $update_fields );
@@ -471,30 +514,23 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 *
 		 */
 		public function update_survey( WP_REST_Request $request ) {
-			// Decode JSON body
-			$body = json_decode( $request->get_body(), true );
-
-			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $body ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Invalid request data.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request(
+				$request,
+				[
+					'require_json' => true,
+					'sanitize'     => true,
+					'check_exists' => false,
+					'block_pro'    => true,
+				]
+			);
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			// Recursively sanitize and convert all fields (strings, booleans, etc.)
-			$data = SurveyX_Admin_Helpers::recursive_sanitize( $body );
-
-			$survey_id = absint( $data['id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing or invalid.', 'surveyx-builder' ) ],
-					400
-				);
-			}
+			$survey_id = $parsed['survey_id'];
+			$data      = $parsed['data'];
 
 			// allow modify data before save
-			do_action( 'surveyx_before_doing_save', $body );
+			do_action( 'surveyx_before_doing_save', $data );
 
 			$questions           = is_array( $data['questions'] ?? null ) ? $data['questions'] : [];
 			$answers             = is_array( $data['answers'] ?? null ) ? $data['answers'] : [];
@@ -512,11 +548,31 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 				);
 			}
 
-			// Update questions & answers - returns ID mapping
+			// Update questions & answers - returns ID mapping, or false if a write
+			// failed and the transaction rolled back. Surface the failure instead of
+			// reporting success on a partial save.
 			$id_mapping = SurveyX_Admin_Db::update_questions_and_answers_base( $survey_id, $questions, $answers );
+
+			if ( false === $id_mapping ) {
+				return new WP_REST_Response(
+					[ 'message' => esc_html__( 'Error during saving questions and answers of the survey. Please try again.', 'surveyx-builder' ) ],
+					500
+				);
+			}
 
 			SurveyX_Admin_Db::delete_questions( $survey_id, $remove_question_ids );
 			SurveyX_Admin_Db::delete_answers( $survey_id, $remove_answer_ids );
+
+			// Deleting questions/answers removes their responses — invalidate the vote cache
+			// so /vote-results doesn't serve pre-deletion counts for its 60s TTL.
+			// delete_questions()/delete_answers() are the LAST writes of the save and do
+			// not fire the saved action themselves, so fire it here: a concurrent /init
+			// that rebuilt the static cache after the earlier save (but before these
+			// deletes) would otherwise pin the removed question/answer for the full TTL.
+			if ( ! empty( $remove_question_ids ) || ! empty( $remove_answer_ids ) ) {
+				SurveyX_Db::flush_vote_cache( $survey_id );
+				do_action( 'surveyx_survey_saved', $survey_id );
+			}
 
 			// Update temp IDs to real IDs in all revisions
 			if ( ! empty( $id_mapping['questions'] ) || ! empty( $id_mapping['answers'] ) ) {
@@ -543,13 +599,67 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		}
 
 		/**
+		 * Builds the list of image sizes the admin can pick for front-end display:
+		 * 'full' (original) plus every image size currently registered in WordPress
+		 * (core + theme/plugin), each with a human label and dimensions.
+		 *
+		 * @return array List of [ 'value', 'label', 'width', 'height' ].
+		 */
+		private function get_registered_image_sizes() {
+			$sizes = [
+				[
+					'value'  => 'full',
+					'label'  => esc_html__( 'Full size (original)', 'surveyx-builder' ),
+					'width'  => 0,
+					'height' => 0,
+				],
+			];
+
+			$registered = function_exists( 'wp_get_registered_image_subsizes' ) ? wp_get_registered_image_subsizes() : [];
+
+			foreach ( $registered as $name => $data ) {
+				$width  = isset( $data['width'] ) ? (int) $data['width'] : 0;
+				$height = isset( $data['height'] ) ? (int) $data['height'] : 0;
+				$label  = ucwords( str_replace( [ '_', '-' ], ' ', $name ) );
+
+				if ( $width || $height ) {
+					$label .= sprintf( ' (%d×%d)', $width, $height );
+				}
+
+				$sizes[] = [
+					'value'  => $name,
+					'label'  => $label,
+					'width'  => $width,
+					'height' => $height,
+				];
+			}
+
+			return $sizes;
+		}
+
+		/**
 		 * Get SurveyX settings via REST API.
+		 *
+		 * Also returns the pickable image sizes and whether the currently stored size
+		 * is no longer registered (so the UI can warn that full-size images are used).
 		 *
 		 * @return WP_REST_Response Settings data.
 		 */
 		public function get_settings() {
-			$settings = SurveyX_Admin_Db::get_settings();
-			return new WP_REST_Response( [ 'data' => $settings ], 200 );
+			$settings    = SurveyX_Admin_Db::get_settings();
+			$image_sizes = $this->get_registered_image_sizes();
+
+			$current = ! empty( $settings['frontend_image_size'] ) ? $settings['frontend_image_size'] : 'full';
+			$missing = ( 'full' !== $current && ! in_array( $current, wp_list_pluck( $image_sizes, 'value' ), true ) );
+
+			return new WP_REST_Response(
+				[
+					'data'               => $settings,
+					'image_sizes'        => $image_sizes,
+					'image_size_missing' => $missing,
+				],
+				200
+			);
 		}
 
 		/**
@@ -595,126 +705,102 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		}
 
 		/**
-		 * Fetches survey templates from the remote API server or from the local cache.
+		 * Fetches a JSON collection (data => [...]) from the SurveyX remote server.
 		 *
-		 * Authorization is handled by permission_callback in REST route registration.
-		 * If cached templates exist and have not expired, the cached data will be returned.
-		 * Otherwise, it will attempt to fetch fresh templates from the remote server and
-		 * cache them for 5 days.
+		 * Single implementation behind fetch_remote_templates / fetch_remote_docs /
+		 * fetch_remote_notifications. When $cache is given, a warm transient is served
+		 * without a remote call and a successful fetch is cached; templates/docs pass no
+		 * cache (the admin caches them client-side).
 		 *
-		 * If the remote server request fails, an error will be logged and an admin notice
-		 * will be displayed in the WordPress dashboard, while falling back to cached data
-		 * (if available).
-		 *
-		 * @param WP_REST_Request $request The REST API request object.
-		 *
-		 * @return WP_REST_Response Returns a REST response containing:
-		 *                          - data:   array of templates (empty array if unavailable).
-		 *                          - message: success message.
-		 *                          Response code 200 on success.
-		 * @since 1.0.0
-		 *
+		 * @param string     $path   Remote path appended to SURVEYX_HOST_BASE.
+		 * @param array      $labels ['success' => str, 'empty' => str, 'empty_status' => int].
+		 * @param array|null $cache  Optional ['key' => str, 'ttl' => int] server-side cache.
+		 * @return WP_REST_Response
 		 */
-		public function fetch_remote_templates( WP_REST_Request $_request ) {
+		private function fetch_remote_collection( $path, array $labels, $cache = null ) {
+			$items = [];
 
-			$timeout = 2 * DAY_IN_SECONDS;
-
-			if ( SurveyX_Admin_Helpers::is_dev_mode() ) {
-				$timeout = 300;
+			// Serve a warm cache (only notifications configures one) without a remote hit.
+			if ( is_array( $cache ) ) {
+				$cached = get_transient( $cache['key'] );
+				if ( ! empty( $cached ) ) {
+					$items = $cached;
+				}
 			}
 
-			$templates_cache = get_transient( 'surveyx_templates' );
-
-			if ( false === $templates_cache ) {
-				$templates = [];
-
+			if ( empty( $items ) ) {
 				$response = wp_remote_post(
-					SURVEYX_HOST_BASE . '/templates/wp-json/surveyx/templates',
+					SURVEYX_HOST_BASE . $path,
 					SurveyX_Admin_Helpers::get_remote_request_args()
 				);
 
 				if ( ! is_wp_error( $response ) ) {
-					$body         = wp_remote_retrieve_body( $response );
-					$body_decoded = json_decode( $body, true );
+					$body_decoded = json_decode( wp_remote_retrieve_body( $response ), true );
 					if ( ! empty( $body_decoded['data'] ) ) {
-						$templates = SurveyX_Admin_Helpers::recursive_sanitize( $body_decoded['data'] );
-						set_transient( 'surveyx_templates', $templates, $timeout );
-						$templates_cache = $templates;
+						$items = SurveyX_Admin_Helpers::recursive_sanitize( $body_decoded['data'] );
+
+						if ( is_array( $cache ) ) {
+							set_transient( $cache['key'], $items, $cache['ttl'] );
+						}
 					}
 				}
 			}
 
-			if ( empty( $templates_cache ) ) {
+			if ( empty( $items ) ) {
 				return new WP_REST_Response(
 					[
 						'data'    => [],
-						'message' => esc_html__( 'No templates available. Could not fetch from cache or remote server.', 'surveyx-builder' ),
+						'message' => $labels['empty'],
 					],
-					500 // Internal Server Error
+					$labels['empty_status']
 				);
 			}
 
 			return new WP_REST_Response(
 				[
-					'data'    => $templates_cache,
-					'message' => esc_html__( 'Templates retrieved successfully.', 'surveyx-builder' ),
+					'data'    => $items,
+					'message' => $labels['success'],
 				],
 				200
 			);
 		}
 
 		/**
+		 * Fetches survey templates from the remote API server.
+		 *
+		 * Authorization is handled by permission_callback in REST route registration.
+		 * No server-side transient: the admin caches templates in the browser
+		 * (localStorage), so this always fetches fresh from the remote.
+		 *
+		 * @param WP_REST_Request $_request The REST API request object.
+		 * @return WP_REST_Response
+		 * @since 1.0.0
+		 */
+		public function fetch_remote_templates( WP_REST_Request $_request ) {
+			return $this->fetch_remote_collection(
+				'/templates/wp-json/surveyx/templates',
+				[
+					'success'      => esc_html__( 'Templates retrieved successfully.', 'surveyx-builder' ),
+					'empty'        => esc_html__( 'No templates available. Could not fetch from the remote server.', 'surveyx-builder' ),
+					'empty_status' => 500,
+				]
+			);
+		}
+
+		/**
 		 * Fetch remote docs from external API for helps page.
-		 * Data is cached for 15 days.
 		 *
 		 * @param WP_REST_Request $_request The REST API request object.
 		 * @return WP_REST_Response Docs data or error.
 		 */
 		public function fetch_remote_docs( WP_REST_Request $_request ) {
-			$timeout = 15 * DAY_IN_SECONDS; // 15 days cache
-
-			if ( SurveyX_Admin_Helpers::is_dev_mode() ) {
-				$timeout = 300; // 5 minutes in debug mode
-			}
-
-			$cache_key  = 'surveyx_docs';
-			$docs_cache = get_transient( $cache_key );
-
-			if ( false === $docs_cache ) {
-				$docs = [];
-
-				$response = wp_remote_post(
-					SURVEYX_HOST_BASE . '/templates/wp-json/surveyx/docs',
-					SurveyX_Admin_Helpers::get_remote_request_args()
-				);
-
-				if ( ! is_wp_error( $response ) ) {
-					$body         = wp_remote_retrieve_body( $response );
-					$body_decoded = json_decode( $body, true );
-					if ( ! empty( $body_decoded['data'] ) ) {
-						$docs = SurveyX_Admin_Helpers::recursive_sanitize( $body_decoded['data'] );
-						set_transient( $cache_key, $docs, $timeout );
-						$docs_cache = $docs;
-					}
-				}
-			}
-
-			if ( empty( $docs_cache ) ) {
-				return new WP_REST_Response(
-					[
-						'data'    => [],
-						'message' => esc_html__( 'No docs available. Could not fetch from cache or remote server.', 'surveyx-builder' ),
-					],
-					500
-				);
-			}
-
-			return new WP_REST_Response(
+			return $this->fetch_remote_collection(
+				'/templates/wp-json/surveyx/docs',
 				[
-					'data'    => $docs_cache,
-					'message' => esc_html__( 'Docs retrieved successfully.', 'surveyx-builder' ),
-				],
-				200
+					'success'      => esc_html__( 'Docs retrieved successfully.', 'surveyx-builder' ),
+					'empty'        => esc_html__( 'No docs available. Could not fetch from the remote server.', 'surveyx-builder' ),
+					'empty_status' => 500,
+				]
 			);
 		}
 
@@ -726,50 +812,19 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns notifications data.
 		 */
 		public function fetch_remote_notifications( WP_REST_Request $_request ) {
-			$timeout = DAY_IN_SECONDS; // 1 day cache
+			$timeout = SurveyX_Admin_Helpers::is_dev_mode() ? 300 : DAY_IN_SECONDS;
 
-			if ( SurveyX_Admin_Helpers::is_dev_mode() ) {
-				$timeout = 300; // 5 minutes in debug mode
-			}
-
-			$cache_key           = 'surveyx_notifications';
-			$notifications_cache = get_transient( $cache_key );
-
-			if ( false === $notifications_cache ) {
-				$notifications = [];
-
-				$response = wp_remote_post(
-					SURVEYX_HOST_BASE . '/templates/wp-json/surveyx/notifications',
-					SurveyX_Admin_Helpers::get_remote_request_args()
-				);
-
-				if ( ! is_wp_error( $response ) ) {
-					$body         = wp_remote_retrieve_body( $response );
-					$body_decoded = json_decode( $body, true );
-					if ( ! empty( $body_decoded['data'] ) ) {
-						$notifications = SurveyX_Admin_Helpers::recursive_sanitize( $body_decoded['data'] );
-						set_transient( $cache_key, $notifications, $timeout );
-						$notifications_cache = $notifications;
-					}
-				}
-			}
-
-			if ( empty( $notifications_cache ) ) {
-				return new WP_REST_Response(
-					[
-						'data'    => [],
-						'message' => esc_html__( 'No notifications available.', 'surveyx-builder' ),
-					],
-					200
-				);
-			}
-
-			return new WP_REST_Response(
+			return $this->fetch_remote_collection(
+				'/templates/wp-json/surveyx/notifications',
 				[
-					'data'    => $notifications_cache,
-					'message' => esc_html__( 'Notifications retrieved successfully.', 'surveyx-builder' ),
+					'success'      => esc_html__( 'Notifications retrieved successfully.', 'surveyx-builder' ),
+					'empty'        => esc_html__( 'No notifications available.', 'surveyx-builder' ),
+					'empty_status' => 200,
 				],
-				200
+				[
+					'key' => 'surveyx_notifications',
+					'ttl' => $timeout,
+				]
 			);
 		}
 
@@ -781,30 +836,18 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		 * @return WP_REST_Response Returns revision ID and saved timestamp.
 		 */
 		public function autosave_survey( WP_REST_Request $request ) {
-			$body = json_decode( $request->get_body(), true );
-
-			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $body ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Invalid request data.', 'surveyx-builder' ) ],
-					400
-				);
+			$parsed = $this->parse_survey_request(
+				$request,
+				[
+					'require_json' => true,
+					'id_key'       => 'survey_id',
+				]
+			);
+			if ( $parsed instanceof WP_REST_Response ) {
+				return $parsed;
 			}
-
-			$survey_id = absint( $body['survey_id'] ?? 0 );
-
-			if ( ! $survey_id ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey ID is missing.', 'surveyx-builder' ) ],
-					400
-				);
-			}
-
-			if ( ! SurveyX_Admin_Db::survey_exists( $survey_id ) ) {
-				return new WP_REST_Response(
-					[ 'message' => esc_html__( 'Survey not found.', 'surveyx-builder' ) ],
-					404
-				);
-			}
+			$survey_id = $parsed['survey_id'];
+			$body      = $parsed['data'];
 
 			// Get revision type from request (default: autosave)
 			$type = sanitize_text_field( $body['type'] ?? 'autosave' );
@@ -822,16 +865,21 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 			// Save revision (may return null if snapshot skipped)
 			$revision_id = SurveyX_Revisions::save_revision( $survey_id, $data, $type );
 
-			// Get saved_at in UTC and convert to local for frontend display
-			$saved_at_utc   = surveyx_get_utc_now();
-			$saved_at_local = surveyx_utc_to_local( $saved_at_utc );
+			// saved_at is sent as a raw UTC string, uniform with data.revisions[].created_at
+			// and every other endpoint. The admin client formats it via its UTC-aware formatter.
+			$saved_at_utc = surveyx_get_utc_now();
 
 			return new WP_REST_Response(
 				[
 					'success'     => true,
 					'revision_id' => $revision_id,
-					'saved_at'    => $saved_at_local,
+					'saved_at'    => $saved_at_utc,
 					'type'        => $type,
+					// Additive: current revision list (max 5), same shape as GET /revisions,
+					// so the admin editor can refresh history without a second request.
+					'data'        => [
+						'revisions' => SurveyX_Revisions::get_revisions( $survey_id, 5 ),
+					],
 				],
 				200
 			);
@@ -956,16 +1004,26 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 		}
 		/**
 		 * Start template import with progress tracking.
-		 * Uses fastcgi_finish_request() to return response immediately,
-		 * then continues processing import in background.
+		 *
+		 * Processing is synchronous: import_handler writes step-by-step progress to
+		 * a transient that the client polls via /import/progress in parallel, then
+		 * this request returns the final survey_id and data once processing finishes.
+		 * The media step is time-bounded, so the request always completes.
 		 *
 		 * @param WP_REST_Request $request The REST API request object.
 		 * @return WP_REST_Response Response with import_id.
 		 */
 		public function start_import( WP_REST_Request $request ) {
 
-			$body        = json_decode( $request->get_body(), true );
-			$template_id = sanitize_text_field( $body['template_id'] ?? '' );
+			// Allow the bounded, long-running import to complete.
+			ignore_user_abort( true );
+			if ( function_exists( 'set_time_limit' ) ) {
+				set_time_limit( 0 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Needed to prevent PHP timeout during large CSV/export generation.
+			}
+
+			$body           = json_decode( $request->get_body(), true );
+			$template_id    = sanitize_text_field( $body['template_id'] ?? '' );
+			$title_override = sanitize_text_field( (string) ( $body['title'] ?? '' ) );
 
 			if ( empty( $template_id ) ) {
 				return new WP_REST_Response(
@@ -981,7 +1039,7 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 
 			// Process import synchronously - progress updates stored in transient
 			// Client polls /import/progress with import_id in parallel to get real-time updates
-			$result = SurveyX_Import_Handler::process_import( $import_id, $template_id );
+			$result = SurveyX_Import_Handler::process_import( $import_id, $template_id, $title_override );
 
 			// Return result with import_id
 			if ( isset( $result['error'] ) ) {
