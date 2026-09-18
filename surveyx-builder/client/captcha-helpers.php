@@ -1,5 +1,5 @@
 <?php
-// Don't load directly
+
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
@@ -7,8 +7,9 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 
 		/**
 		 * Captcha providers supported by the FREE plugin.
-		 * The free version only supports reCAPTCHA v2; it must never resolve to
-		 * reCAPTCHA v3 or Turnstile even if `captcha_provider` requests them.
+		 *
+		 * Free supports reCAPTCHA v2 only, and must never resolve to reCAPTCHA v3 or
+		 * Turnstile even when `captcha_provider` asks for them.
 		 *
 		 * @return string[] Supported provider identifiers.
 		 */
@@ -20,10 +21,10 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 		 * Determines which captcha type should be used based on settings.
 		 *
 		 * Resolution order:
-		 * 1. If `captcha_provider` is set (new source of truth), resolve from it —
-		 *    the provider must be supported by this version AND have both keys.
-		 * 2. Backward compat: if `captcha_provider` is unset/empty (old installs),
-		 *    fall back to the legacy `*_enabled` + keys priority logic.
+		 * 1. `captcha_provider`, the source of truth — the provider must be supported by
+		 *    THIS version AND have both keys.
+		 * 2. Back-compat for old installs where it is unset/empty: the legacy
+		 *    `*_enabled` + keys priority logic.
 		 *
 		 * @param object|array $settings Settings object or array.
 		 *
@@ -81,12 +82,10 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 		 * @return array Resolved captcha array (type + site_key).
 		 */
 		protected static function resolve_legacy_captcha( $settings ) {
-			// Check reCAPTCHA v2
 			$recaptcha_enabled    = self::get_setting_value( $settings, 'recaptcha_v2_enabled' );
 			$recaptcha_site_key   = self::get_setting_value( $settings, 'recaptcha_v2_site_key' );
 			$recaptcha_secret_key = self::get_setting_value( $settings, 'recaptcha_v2_secret_key' );
 
-			// reCAPTCHA v2 is available if enabled AND both keys are present
 			if ( $recaptcha_enabled && ! empty( $recaptcha_site_key ) && ! empty( $recaptcha_secret_key ) ) {
 				return [
 					'type'     => 'recaptcha_v2',
@@ -101,7 +100,7 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 		}
 
 		/**
-		 * Helper to get setting value from object or array.
+		 * Reads a setting from either an object or an array shape.
 		 *
 		 * @param object|array $settings Settings.
 		 * @param string       $key Setting key.
@@ -133,9 +132,15 @@ if ( ! class_exists( 'SurveyX_Captcha_Helpers', false ) ) {
 				return false;
 			}
 
+			// Validated, not merely sanitised - matching the v3 and Turnstile verifiers.
+			// A malformed REMOTE_ADDR is sent as empty rather than forwarded to the
+			// provider, which is the only value they accept besides a real address.
 			$remote_ip = '';
 			if ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
-				$remote_ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+				$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+					$remote_ip = $ip;
+				}
 			}
 
 			$response = wp_remote_post(

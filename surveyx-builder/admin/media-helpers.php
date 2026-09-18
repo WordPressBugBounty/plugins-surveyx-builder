@@ -1,17 +1,11 @@
 <?php
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; // Prevent direct access.
+	exit;
 }
 
 /**
- * SurveyX Media Helper
- *
- * Provides utilities for processing external image URLs:
- * - Detects whether a URL is external.
- * - Validates image URLs and MIME types.
- * - Uploads external images into the WordPress media library.
- * - Recursively processes data arrays to replace image URLs with local media references.
+ * Validates external image URLs and sideloads them into the WordPress media library.
  *
  * @since 1.0.0
  */
@@ -23,7 +17,7 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 		 *
 		 * @since 1.0.0
 		 */
-		const MAX_FILE_SIZE = 12582912; // 12MB in bytes
+		const MAX_FILE_SIZE = 12582912;
 
 		/**
 		 * Request timeout in seconds.
@@ -105,17 +99,14 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				return false;
 			}
 
-			// Validate URL format
 			if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
 				return false;
 			}
 
-			// Validate URL scheme
 			if ( ! self::is_valid_url_scheme( $url ) ) {
 				return false;
 			}
 
-			// Check file extension
 			$path = wp_parse_url( $url, PHP_URL_PATH );
 			if ( empty( $path ) ) {
 				return false;
@@ -126,12 +117,10 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				return false;
 			}
 
-			// Only allow specific image extensions
 			if ( in_array( $ext, self::$allowed_extensions, true ) ) {
 				return true;
 			}
 
-			// Fallback: check MIME type against allowed types
 			$filetype = wp_check_filetype( $url );
 			if ( ! empty( $filetype['type'] ) && in_array( $filetype['type'], self::$allowed_mime_types, true ) ) {
 				return true;
@@ -153,27 +142,25 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 		 */
 		public static function upload_image( $image_url, $filename = '', $timeout = self::REQUEST_TIMEOUT ) {
 			$timeout = absint( $timeout ) > 0 ? absint( $timeout ) : self::REQUEST_TIMEOUT;
-			// Validate URL
 			if ( empty( $image_url ) || ! is_string( $image_url ) ) {
 				return new WP_Error( 'invalid_url', esc_html__( 'Invalid image URL provided.', 'surveyx-builder' ) );
 			}
 
-			// Validate URL format and scheme
 			if ( ! filter_var( $image_url, FILTER_VALIDATE_URL ) || ! self::is_valid_url_scheme( $image_url ) ) {
 				return new WP_Error( 'invalid_url', esc_html__( 'Invalid image URL format.', 'surveyx-builder' ) );
 			}
 
-			// Validate it's an image URL
 			if ( ! self::is_image_url( $image_url ) ) {
 				return new WP_Error( 'not_image', esc_html__( 'URL does not point to a valid image.', 'surveyx-builder' ) );
 			}
 
-			// Include necessary WordPress files
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			require_once ABSPATH . 'wp-admin/includes/media.php';
 			require_once ABSPATH . 'wp-admin/includes/image.php';
 
-			// Verify the URL points to an image by checking Content-Type and size
+			// HEAD first, so a wrong Content-Type or an oversized Content-Length is rejected before
+			// downloading. Both headers are remote-controlled, so size and MIME are re-checked on the
+			// downloaded bytes below.
 			$response = wp_safe_remote_head(
 				$image_url,
 				[
@@ -206,13 +193,11 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				);
 			}
 
-			// Validate Content-Type
 			$content_type = wp_remote_retrieve_header( $response, 'content-type' );
 			if ( ! in_array( $content_type, self::$allowed_mime_types, true ) ) {
 				return new WP_Error( 'invalid_mime_type', esc_html__( 'Invalid image MIME type.', 'surveyx-builder' ) );
 			}
 
-			// Check Content-Length to prevent large file uploads
 			$content_length = wp_remote_retrieve_header( $response, 'content-length' );
 			if ( $content_length && $content_length > self::MAX_FILE_SIZE ) {
 				return new WP_Error(
@@ -225,7 +210,7 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				);
 			}
 
-			// Clean filename: strip query string and use basename
+			// basename() of the parsed PATH, so a query string never reaches the filename.
 			if ( empty( $filename ) ) {
 				$url_path = wp_parse_url( $image_url, PHP_URL_PATH );
 				$filename = sanitize_file_name( basename( $url_path ) );
@@ -233,19 +218,15 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				$filename = sanitize_file_name( $filename );
 			}
 
-			// Ensure filename has extension
 			if ( empty( pathinfo( $filename, PATHINFO_EXTENSION ) ) ) {
-				// Try to get extension from URL or content type
 				$url_ext = strtolower( pathinfo( wp_parse_url( $image_url, PHP_URL_PATH ), PATHINFO_EXTENSION ) );
 				if ( in_array( $url_ext, self::$allowed_extensions, true ) ) {
 					$filename .= '.' . $url_ext;
 				} else {
-					// Default to jpg
 					$filename .= '.jpg';
 				}
 			}
 
-			// Download the image to a temporary file
 			$tmp = download_url( $image_url, $timeout );
 			if ( is_wp_error( $tmp ) ) {
 				return new WP_Error(
@@ -258,7 +239,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				);
 			}
 
-			// Double-check file size after download
 			if ( file_exists( $tmp ) ) {
 				$file_size = filesize( $tmp );
 				if ( $file_size > self::MAX_FILE_SIZE ) {
@@ -266,7 +246,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 					return new WP_Error( 'file_too_large', esc_html__( 'Downloaded file exceeds size limit.', 'surveyx-builder' ) );
 				}
 
-				// Verify MIME type of downloaded file
 				$file_type = wp_check_filetype_and_ext( $tmp, $filename );
 				if ( ! $file_type['ext'] || ! $file_type['type'] || ! in_array( $file_type['type'], self::$allowed_mime_types, true ) ) {
 					wp_delete_file( $tmp );
@@ -276,13 +255,11 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				return new WP_Error( 'file_not_found', esc_html__( 'Downloaded file not found.', 'surveyx-builder' ) );
 			}
 
-			// Prepare file array for sideload
 			$file_array = [
 				'name'     => $filename,
 				'tmp_name' => $tmp,
 			];
 
-			// Sideload the image into WordPress
 			$attachment_id = media_handle_sideload(
 				$file_array,
 				0,
@@ -293,7 +270,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				]
 			);
 
-			// Cleanup temp file
 			if ( file_exists( $tmp ) ) {
 				wp_delete_file( $tmp );
 			}
@@ -309,7 +285,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				);
 			}
 
-			// Get the URL of the uploaded image
 			$url = wp_get_attachment_url( $attachment_id );
 			if ( ! $url ) {
 				return new WP_Error( 'attachment_url_failed', esc_html__( 'Failed to get attachment URL.', 'surveyx-builder' ) );
@@ -319,55 +294,6 @@ if ( ! class_exists( 'SurveyX_Media_Helper' ) ) {
 				'id'  => $attachment_id,
 				'url' => esc_url_raw( $url ),
 			];
-		}
-
-		/**
-		 * Recursively scan and process image URLs inside an array.
-		 *
-		 * - Converts external image URLs into local uploads.
-		 * - Replaces the original URL with the uploaded one.
-		 * - Adds a corresponding attachment ID (`image_id`) where applicable.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param mixed $data The input data array (or value).
-		 * @return mixed The processed data with updated image references.
-		 */
-		protected static function process_recursive( $data ) {
-			if ( ! is_array( $data ) ) {
-				return $data;
-			}
-
-			$processed = [];
-
-			foreach ( $data as $key => $value ) {
-				if ( is_string( $value ) && ! empty( $value ) && self::is_image_url( $value ) ) {
-					// Found an image URL
-					if ( self::is_external_url( $value ) ) {
-						$upload_result = self::upload_image( $value );
-
-						if ( ! is_wp_error( $upload_result ) ) {
-							$processed[ $key ]     = $upload_result['url'];
-							$processed['image_id'] = $upload_result['id'];
-						} else {
-							// keep original URL
-							$processed[ $key ] = $value;
-						}
-					} else {
-						// Local image → keep URL
-						$processed[ $key ]     = $value;
-						$processed['image_id'] = absint( $data['image_id'] ?? 0 );
-					}
-				} elseif ( 'image_id' === $key ) {
-					// Sanitize image_id
-					$processed[ $key ] = absint( $processed['image_id'] ?? 0 );
-				} else {
-					// Recurse deeper
-					$processed[ $key ] = is_array( $value ) ? self::process_recursive( $value ) : $value;
-				}
-			}
-
-			return $processed;
 		}
 	}
 }

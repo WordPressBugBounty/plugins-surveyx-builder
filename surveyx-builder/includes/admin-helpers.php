@@ -97,6 +97,17 @@ if ( ! class_exists( 'SurveyX_Admin_Helpers', false ) ) {
 				return (bool) $data;
 			}
 
+			// null reaches here on every payload carrying an unset field — a cleared expiry,
+			// an optional setting the client sends as null — and wp_kses( null ) emits
+			// "Passing null to parameter #3 of preg_replace()" on PHP 8.1+, once per null per
+			// save, filling a customer's debug.log with a deprecation from OUR sanitiser; on
+			// PHP 9 it stops being a deprecation. Returns '' DELIBERATELY, because that is what
+			// wp_kses( null ) already returned — every settings blob written so far stores ''
+			// where the client sent null, so propagating null would change the saved shape.
+			if ( null === $data ) {
+				return '';
+			}
+
 			return wp_kses( wp_unslash( $data ), self::$allowed_html );
 		}
 
@@ -160,10 +171,8 @@ if ( ! class_exists( 'SurveyX_Admin_Helpers', false ) ) {
 				return '';
 			}
 
-			// Use WordPress esc_url_raw for initial sanitization
 			$url = esc_url_raw( $url );
 
-			// Block javascript: protocol (case-insensitive)
 			if ( preg_match( '/^javascript:/i', $url ) ) {
 				return '';
 			}
@@ -200,7 +209,6 @@ if ( ! class_exists( 'SurveyX_Admin_Helpers', false ) ) {
 				],
 			];
 
-			// Add Authorization header with license key if enabled
 			if ( $with_auth ) {
 				$license_key = '';
 				if ( function_exists( 'surveyx_get_license_key' ) ) {

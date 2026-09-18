@@ -1,17 +1,12 @@
 <?php
 
 /**
- * SurveyX Shortcode Handler - Refactored
+ * SurveyX shortcode handler for [surveyx id="X"].
  *
- * Handles [surveyx id="X"] shortcode rendering.
- * New approach:
- * - Renders minimal HTML placeholder with captcha (if enabled)
- * - Vue app fetches survey data via REST API after captcha verification
- * - Avoids caching issues with wp_create_nonce
- *
+ * Renders a generic, cache-safe placeholder; the Vue client fetches the survey
+ * over the REST API after captcha verification.
  */
 
-// Don't load directly
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
@@ -19,6 +14,13 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 
 		private static $instance;
 		public const PREFIX = 'surveyx-';
+
+		/** @var string Access gate results returned by get_access_gate(). */
+		public const GATE_PASS           = '';
+		public const GATE_NOT_FOUND      = 'not_found';
+		public const GATE_NOT_AVAILABLE  = 'not_available';
+		public const GATE_NOT_PUBLISHED  = 'not_published';
+		public const GATE_LOGIN_REQUIRED = 'login_required';
 
 		public static function get_instance() {
 			if ( null === self::$instance ) {
@@ -38,20 +40,21 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 
 		/**
 		 * Registers client-side styles and scripts.
-		 * Only loads ONE captcha script based on priority (Turnstile > reCAPTCHA v2).
 		 *
 		 * @return void
 		 */
 		public function register_scripts() {
-			// Register styles
 			wp_register_style( self::PREFIX . 'client', SURVEYX_URL . 'assets/client/style.min.css', [], SURVEYX_VERSION );
 
-			// Register scripts (captcha scripts are loaded dynamically in Vue component)
+			// Captcha scripts are loaded dynamically by the Vue client, not registered here.
 			wp_register_script( self::PREFIX . 'vendor-client', SURVEYX_URL . 'assets/vendor-client/bundle.js', [], SURVEYX_VERSION, true );
 			wp_register_script( self::PREFIX . 'client', SURVEYX_URL . 'assets/client/bundle.js', [ 'wp-i18n', self::PREFIX . 'vendor-client' ], SURVEYX_VERSION, true );
+			surveyx_pin_chunk_base_url( self::PREFIX . 'client' );
 
-			// Load JavaScript translations
-			wp_set_script_translations( self::PREFIX . 'client', 'surveyx-builder' );
+			// The 3rd argument is required: without it WordPress only looks in
+			// WP_LANG_DIR/plugins, where nothing but a wordpress.org language pack lands,
+			// so the .json files shipped in this plugin's languages/ are never read.
+			wp_set_script_translations( self::PREFIX . 'client', 'surveyx-builder', SURVEYX_PATH . 'languages' );
 		}
 
 		/**
@@ -68,21 +71,47 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return $output;
 			}
 
+			self::enqueue_client_assets();
+
+			return $output;
+		}
+
+		/**
+		 * Registers, configures and enqueues the client bundle.
+		 * Shared by the [surveyx] shortcode and the standalone survey page, so both
+		 * render modes boot the exact same client with the exact same config.
+		 *
+		 * @return void
+		 */
+		public static function enqueue_client_assets() {
+			$handler = self::get_instance();
+
 			if ( ! wp_script_is( self::PREFIX . 'client', 'registered' ) ) {
-				$this->register_scripts();
+				$handler->register_scripts();
 			}
 
-			// Only configure once (wp_localize_script can only be called once per script handle)
-			if ( ! wp_script_is( self::PREFIX . 'client', 'done' ) ) {
-				// Get captcha info
+			// wp_localize_script() APPENDS. Called twice for one handle it prints the
+			// whole object twice and the second assignment silently wins, so this must
+			// run once per request no matter how many [surveyx] shortcodes a page holds.
+			//
+			// 'done' is the wrong test and was the wrong test before: it only turns true
+			// once the script has been PRINTED, which happens in wp_footer - long after
+			// two shortcodes in the_content have both been through here. Asking whether
+			// the handle already carries data is the question that actually matters.
+			//
+			// The enqueue calls stay outside the guard: they are idempotent, and a return
+			// here would skip them on the second shortcode.
+			$already_localized = false !== wp_scripts()->get_data( self::PREFIX . 'client', 'data' );
+
+			if ( ! $already_localized ) {
+
 				$settings     = SurveyX_Db::get_settings();
 				$captcha_info = SurveyX_Captcha_Helpers::get_active_captcha( $settings );
 
-				// NOTE: The REST nonce is intentionally NOT embedded here. A per-user nonce
-				// baked into shortcode HTML breaks under full-page caching (one user's nonce
-				// gets served to everyone). Login-required surveys instead receive a fresh,
-				// always-correct nonce via the POST /init response (`rest_nonce`), which is
-				// never page-cached. This keeps the shortcode HTML fully generic/cache-safe.
+				// The REST nonce is deliberately NOT embedded: a per-user nonce baked into
+				// shortcode HTML is served to everyone under full-page caching. Login-required
+				// surveys get a fresh one from the POST /init response (`rest_nonce`), which is
+				// never page-cached, keeping this markup generic.
 				$config = [
 					'apiUrl'         => esc_url_raw( rest_url( 'surveyx/v1' ) ),
 					'captchaType'    => $captcha_info['type'] ?? 'none',
@@ -90,11 +119,73 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				];
 
 				wp_localize_script( self::PREFIX . 'client', 'surveyxConfigs', $config );
-
-				// Enqueue scripts only once
-				wp_enqueue_style( self::PREFIX . 'client' );
-				wp_enqueue_script( self::PREFIX . 'client' );
 			}
+
+			wp_enqueue_style( self::PREFIX . 'client' );
+			wp_enqueue_script( self::PREFIX . 'client' );
+		}
+
+		/**
+		 * Enqueues the client stylesheet on its own.
+		 * For pages that render a notice instead of booting the survey app, so the
+		 * notice is styled without shipping the bundle it does not use.
+		 *
+		 * @return void
+		 */
+		public static function enqueue_client_style() {
+			if ( ! wp_style_is( self::PREFIX . 'client', 'registered' ) ) {
+				self::get_instance()->register_scripts();
+			}
+
+			wp_enqueue_style( self::PREFIX . 'client' );
+		}
+
+		/**
+		 * Renders the survey mount point plus its branded loader.
+		 * Shared by the shortcode and the standalone survey page; the mode only
+		 * decides which container classes are emitted.
+		 *
+		 * @param int|string $survey_id Survey ID.
+		 * @param string     $size      Size key, shortcode mode only.
+		 * @param string     $mode      'shortcode' or 'fullpage'.
+		 *
+		 * @return string HTML output.
+		 */
+		public static function render_survey_container( $survey_id, $size = 'l', $mode = 'shortcode' ) {
+			$render_row    = SurveyX_Db::get_survey_render_row( $survey_id );
+			$survey_config = is_array( $render_row->settings ?? null ) ? $render_row->settings : [];
+
+			$theme = sanitize_key( $survey_config['theme'] ?? 'normal' );
+
+			$classes = [ 'surveyx' ];
+
+			if ( 'fullpage' === $mode ) {
+				$classes[] = 'surveyx-page';
+				$classes[] = 'survey-theme-' . $theme;
+			} else {
+				$classes[] = 'surveyx-shortcode';
+				$classes[] = 'survey-theme-' . $theme;
+				$classes[] = 'survey-size-' . sanitize_key( $size );
+			}
+
+			// dir="ltr" is deliberate: the survey stylesheet positions with physical
+			// left/right throughout, so inheriting dir="rtl" flips the text and the flex
+			// order while every explicit offset stays put — a mixed layout worse than
+			// either direction done properly. Pinned until the stylesheet uses logical
+			// properties; RTL script still shapes and reads correctly, only the block
+			// direction does not mirror.
+			$output  = '<div class="' . esc_attr( implode( ' ', $classes ) ) . '" dir="ltr" data-survey-id="' . esc_attr( $survey_id ) . '">';
+			$output .= self::render_loader();
+
+			// Scripting disabled: the mount never happens, so hide the branded loader (an
+			// animated bar above a "needs JavaScript" line reads as a broken page) and say
+			// why instead. The CSS must be inline because it applies without the bundle
+			// ever running, and every --sx-* variable, the font included, comes from it.
+			$output .= '<noscript>';
+			$output .= '<style>.surveyx .sx-loader{display:none}.surveyx-page{font-family:system-ui,sans-serif}</style>';
+			$output .= '<div class="surveyx-notice"><p class="surveyx-notice-message">' . esc_html__( 'This survey needs JavaScript to run. Please enable JavaScript in your browser, then reload this page.', 'surveyx-builder' ) . '</p></div>';
+			$output .= '</noscript>';
+			$output .= '</div>';
 
 			return $output;
 		}
@@ -109,13 +200,11 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 		public function render_survey( $atts ) {
 			$survey_id = ! empty( $atts['id'] ) ? esc_attr( $atts['id'] ) : '';
 
-			// Extract and validate size attribute
 			$size        = ! empty( $atts['size'] ) ? sanitize_key( $atts['size'] ) : 'l';
 			$valid_sizes = [ 'xs', 's', 'm', 'l', 'xl' ];
 			if ( ! in_array( $size, $valid_sizes, true ) ) {
 				$size = 'l';
 			}
-			$size_class = 'survey-size-' . $size;
 
 			if ( empty( $survey_id ) ) {
 				if ( current_user_can( 'manage_options' ) ) {
@@ -128,11 +217,11 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return '';
 			}
 
-			// Fetch the survey row once (memoized) — covers existence, mode and settings.
+			// Memoized: one fetch covers existence, mode and settings.
 			$render_row = SurveyX_Db::get_survey_render_row( $survey_id );
+			$gate       = self::get_access_gate( $render_row );
 
-			// Check if survey exists
-			if ( is_null( $render_row ) ) {
+			if ( self::GATE_NOT_FOUND === $gate ) {
 				if ( current_user_can( 'manage_options' ) ) {
 					return self::render_notice(
 						esc_html__( 'Survey Not Found', 'surveyx-builder' ),
@@ -147,20 +236,23 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return '';
 			}
 
-			// Check if pro survey but free version is active
-			$survey_mode = $render_row->s_mode;
-			if ( 'pro' === $survey_mode && current_user_can( 'manage_options' ) ) {
-				return self::render_notice(
-					esc_html__( 'Pro Survey', 'surveyx-builder' ),
-					esc_html__( 'This survey uses Pro features. Please activate SurveyX Pro to display it.', 'surveyx-builder' )
-				) . $this->render_admin_edit_links( $survey_id );
+			if ( SurveyX_Db::survey_needs_pro( $render_row->id, $render_row->s_mode ) ) {
+				if ( current_user_can( 'manage_options' ) ) {
+					return self::render_notice(
+						esc_html__( 'Pro Survey', 'surveyx-builder' ),
+						esc_html__( 'This survey uses Pro features. Please activate SurveyX Pro to display it.', 'surveyx-builder' )
+					) . $this->render_admin_edit_links( $survey_id );
+				}
+
+				// The free engine cannot render a Pro-mode survey at all: is_survey_open()
+				// and get_survey_init_data() ask survey_needs_pro() the same question, so
+				// /init answers 404 whatever else is true of this row. Returning now also
+				// stops the gates below promising something — "log in and you may take
+				// this" — that logging in could never deliver.
+				return '';
 			}
 
-			// Get survey settings to determine theme
-			$survey_settings = $render_row->settings;
-
-			// Check if survey settings could be retrieved
-			if ( is_null( $survey_settings ) ) {
+			if ( self::GATE_NOT_AVAILABLE === $gate ) {
 				if ( current_user_can( 'manage_options' ) ) {
 					return self::render_notice(
 						esc_html__( 'Survey Not Available', 'surveyx-builder' ),
@@ -175,18 +267,119 @@ if ( ! class_exists( 'SurveyX_Shortcode_Handler', false ) ) {
 				return '';
 			}
 
-			$theme       = sanitize_key( $survey_settings['theme'] ?? 'normal' );
-			$theme_class = 'survey-theme-' . $theme;
+			// Only reached by a logged-out visitor. Without this the mount point is
+			// emitted, /init answers 404 to anyone not signed in and the client removes
+			// the container — blank space where the survey was, and no way to know why.
+			if ( self::GATE_LOGIN_REQUIRED === $gate ) {
+				// Back to the post the shortcode sits in, not wp-admin, where a bare
+				// wp_login_url() lands a subscriber. The permalink is identical for every
+				// visitor, so a full-page cache can hold this markup safely.
+				$return_to = get_permalink();
 
-			// Render placeholder with branded loader - Vue will replace this after loading
-			$output  = '<div class="surveyx surveyx-shortcode ' . esc_attr( $theme_class ) . ' ' . esc_attr( $size_class ) . '" data-survey-id="' . esc_attr( $survey_id ) . '">';
-			$output .= self::render_loader();
-			$output .= '</div>';
+				return self::render_login_required_notice( $return_to ? $return_to : home_url( '/' ) );
+			}
 
-			// Add edit links for admins
+			$output = self::render_survey_container( $survey_id, $size, 'shortcode' );
+
 			$output .= $this->render_admin_edit_links( $survey_id );
 
 			return $output;
+		}
+
+		/**
+		 * Evaluates the access gates that decide whether a survey may be answered.
+		 *
+		 * Single source of truth for the [surveyx] shortcode and the standalone
+		 * survey page, so both render paths agree on who may take a survey.
+		 *
+		 * @param object|null $render_row Row from SurveyX_Db::get_survey_render_row().
+		 *
+		 * @return string One of the GATE_* constants; GATE_PASS when the survey
+		 *                may be rendered.
+		 */
+		public static function get_access_gate( $render_row ) {
+			if ( is_null( $render_row ) ) {
+				return self::GATE_NOT_FOUND;
+			}
+
+			if ( is_null( $render_row->settings ) ) {
+				return self::GATE_NOT_AVAILABLE;
+			}
+
+			// Covers an unpublished status and an empty question set alike. Checked LAST
+			// so the two gates above keep exactly the rows they had, and deliberately left
+			// unhandled by render_survey(): the shortcode has always rendered drafts and
+			// empty surveys for whoever embedded them; only the standalone page refuses them.
+			if ( empty( $render_row->is_published ) ) {
+				return self::GATE_NOT_PUBLISHED;
+			}
+
+			$settings = is_array( $render_row->settings ?? null ) ? $render_row->settings : [];
+
+			// The free engine honours "Login Required to Vote" — /init already refuses a
+			// logged-out visitor — so the renderer must say so, or the refusal reaches them
+			// as an empty container. There is deliberately NO GATE_EXPIRED beside it: free
+			// has no closing-date UI and its is_survey_open() enforces none, so a
+			// renderer-only expiry would hide a survey the free API still accepts answers for.
+			if ( self::should_require_login( ! empty( $settings['require_logged_in'] ) ) ) {
+				return self::GATE_LOGIN_REQUIRED;
+			}
+
+			return self::GATE_PASS;
+		}
+
+		/**
+		 * Renders the notice shown to a logged-out visitor on a login-only survey.
+		 * Shared by the shortcode and the standalone survey page, so both render
+		 * paths tell the visitor the same thing AND offer the same way out of it.
+		 *
+		 * Telling somebody to log in without giving them a link is a dead end, so the
+		 * link markup lives here once rather than in each caller.
+		 *
+		 * @param string $login_redirect Where to send the visitor after they log in.
+		 *                               Empty renders the card with no link, which is
+		 *                               what a caller that has no URL to return to
+		 *                               should get.
+		 * @return string HTML output.
+		 */
+		public static function render_login_required_notice( $login_redirect = '' ) {
+			$card = surveyx_render_notification(
+				esc_html__( 'Login Required to Vote', 'surveyx-builder' ),
+				esc_html__( 'Please log in to your account before voting on this survey. This ensures that each vote is counted fairly and securely.', 'surveyx-builder' )
+			);
+
+			if ( '' === (string) $login_redirect ) {
+				return $card;
+			}
+
+			return '<div class="sx-page-notice">'
+				. $card
+				. '<a class="sx-page-notice__login" href="' . esc_url( wp_login_url( $login_redirect ) ) . '">'
+				. esc_html__( 'Log in', 'surveyx-builder' )
+				. '</a>'
+				. '</div>';
+		}
+
+		/**
+		 * Checks if login is required and the visitor is not logged in.
+		 *
+		 * @param bool $is_login_required Whether login is required.
+		 *
+		 * @return bool True if the login notice should be shown.
+		 */
+		private static function should_require_login( $is_login_required ) {
+			return ! is_user_logged_in() && $is_login_required;
+		}
+
+		/**
+		 * Public accessor for the administrator edit links, used by the standalone
+		 * survey page which cannot reach the protected renderer.
+		 *
+		 * @param int $survey_id Survey ID.
+		 * @return string HTML output for edit links.
+		 */
+		public function public_admin_edit_links( $survey_id ) {
+			return $this->render_admin_edit_links( $survey_id );
 		}
 
 		/**

@@ -6,7 +6,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 	/**
-	 * Helper class for collecting request data like IP address, user agent, and location.
+	 * Helper class for resolving the visitor's IP address and, through the surveyx_get_location
+	 * filter, their location. The IP itself is never stored - see get_request_data().
 	 */
 	class SurveyX_Request_Helper {
 
@@ -21,12 +22,9 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 		public static function get_ip_address() {
 			$ip_address = '';
 
-			// Default: Only trust REMOTE_ADDR (secure)
-			// Enable proxy headers only if behind a trusted load balancer/proxy
 			$trust_proxy_headers = apply_filters( 'surveyx_trust_proxy_headers', false );
 
 			if ( $trust_proxy_headers ) {
-				// Check proxy headers only if explicitly enabled
 				$proxy_headers = [
 					'HTTP_X_FORWARDED_FOR',
 					'HTTP_X_REAL_IP',
@@ -52,7 +50,6 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 				}
 			}
 
-			// Always fall back to REMOTE_ADDR
 			if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
 				$ip_address = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
 
@@ -65,21 +62,10 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 		}
 
 		/**
-		 * Gets the user's user agent string.
-		 *
-		 * @return string The user agent string or empty string if not available.
-		 */
-		public static function get_user_agent() {
-			if ( ! empty( $_SERVER['HTTP_USER_AGENT'] ) ) {
-				return sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) );
-			}
-
-			return '';
-		}
-
-		/**
 		 * Gets location data for the given IP address.
-		 * This is a placeholder - implement your own geolocation service.
+		 *
+		 * Ships with no provider, so the return is empty unless a site hooks
+		 * surveyx_get_location. The IP is resolved only to hand to that filter, never stored.
 		 *
 		 * @param string $ip_address The IP address to get location for.
 		 *
@@ -90,14 +76,12 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 				$ip_address = self::get_ip_address();
 			}
 
-			// Default empty location.
 			$location = [
 				'country' => '',
 				'region'  => '',
 				'city'    => '',
 			];
 
-			// Skip for local IPs.
 			if ( empty( $ip_address ) || self::is_local_ip( $ip_address ) ) {
 				return $location;
 			}
@@ -123,7 +107,6 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 				return true;
 			}
 
-			// Check for localhost.
 			if ( '127.0.0.1' === $ip_address || '::1' === $ip_address ) {
 				return true;
 			}
@@ -139,17 +122,25 @@ if ( ! class_exists( 'SurveyX_Request_Helper', false ) ) {
 		/**
 		 * Gets all request data in a single call.
 		 *
+		 * Collects location only, and only when the site hooks surveyx_get_location to supply a
+		 * geolocation provider. ip_address and user_agent come back empty on purpose: no query
+		 * in either edition SELECTs those columns, so filling them would store a respondent's IP
+		 * and browser string that nothing can read. Both keys stay in the array because
+		 * SurveyX_Session_Manager::create_session() writes all three columns, and its upsert
+		 * leaves a column untouched when the incoming value is '' - values an older build
+		 * already stored are preserved, not cleared.
+		 *
 		 * @return array Associative array with ip_address, user_agent, and location keys.
 		 */
 		public static function get_request_data() {
-			$ip_address = self::get_ip_address();
-			$user_agent = self::get_user_agent();
-			$location   = self::get_location( $ip_address );
+			$location = self::get_location();
 
+			// Encoded only once a provider resolved something, or every row would carry a
+			// constant {"country":"","region":"","city":""}.
 			return [
-				'ip_address' => $ip_address,
-				'user_agent' => $user_agent,
-				'location'   => wp_json_encode( $location ),
+				'ip_address' => '',
+				'user_agent' => '',
+				'location'   => ( is_array( $location ) && array_filter( $location ) ) ? wp_json_encode( $location ) : '',
 			];
 		}
 	}

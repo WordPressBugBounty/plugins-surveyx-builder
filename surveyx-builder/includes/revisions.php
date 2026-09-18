@@ -4,13 +4,20 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * SurveyX Revisions Manager
- * Smart autosave system with snapshot strategy
+ * SurveyX Revisions Manager — autosave with a snapshot strategy.
  *
  * Types:
- * - autosave: Overwrites previous (keeps 1)
- * - snapshot: Auto-created every 5 min (keeps max 5)
- * - manual: User clicks Save (always kept)
+ * - autosave: overwrites the previous one (keeps 1)
+ * - snapshot: auto-created every 5 min
+ * - manual:   saved on request by a caller that asks for it
+ *
+ * snapshot and manual share ONE retention pool of MAX_SNAPSHOTS rows: cleanup_snapshots()
+ * prunes `revision_type IN ('snapshot','manual')` together, oldest first. A manual row is
+ * therefore NOT kept forever — enough newer snapshots push it out exactly as they push out
+ * an older snapshot.
+ *
+ * Nothing in either plugin creates a manual revision today: the REST endpoint accepts the
+ * type, but the admin app only ever sends 'autosave'.
  */
 class SurveyX_Revisions {
 
@@ -64,7 +71,6 @@ class SurveyX_Revisions {
 				);
 				$revision_id = (int) $existing_id;
 			} else {
-				// No existing autosave, insert new
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 				$wpdb->insert(
 					$table,
@@ -80,7 +86,6 @@ class SurveyX_Revisions {
 				$revision_id = $wpdb->insert_id;
 			}
 
-			// Also create snapshot if interval passed (for revision history)
 			self::maybe_create_snapshot( $survey_id, $data, $user_id, $now );
 
 			return $revision_id;
@@ -110,7 +115,6 @@ class SurveyX_Revisions {
 		global $wpdb;
 		$table = $wpdb->prefix . 'surveyx_revisions';
 
-		// Check last snapshot time
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 		$last_snapshot_time = $wpdb->get_var(
 			$wpdb->prepare(
@@ -122,7 +126,6 @@ class SurveyX_Revisions {
 			)
 		);
 
-		// Skip if too recent
 		if ( $last_snapshot_time ) {
 			// Parse the stored value as UTC explicitly (it is always UTC), rather than
 			// relying on WP having set PHP's default timezone to UTC.
@@ -132,10 +135,11 @@ class SurveyX_Revisions {
 			}
 		}
 
-		// Cleanup old snapshots before adding new
-		self::cleanup_snapshots( $survey_id );
+		// Prune to one BELOW the cap, because the insert immediately below adds the row
+		// that fills it. Pruning to the cap itself and then inserting settled the table
+		// at MAX_SNAPSHOTS + 1 — measured at 6 rows for a constant that says 5.
+		self::cleanup_snapshots( $survey_id, self::MAX_SNAPSHOTS - 1 );
 
-		// Insert snapshot
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 		$wpdb->insert(
 			$table,
@@ -248,12 +252,36 @@ class SurveyX_Revisions {
 	}
 
 	/**
-	 * Cleanup old snapshots, keep only MAX_SNAPSHOTS
+	 * Delete a survey's oldest snapshot/manual revisions, keeping the newest $keep.
+	 *
+	 * $keep defaults to MAX_SNAPSHOTS, which is what a caller that only prunes wants.
+	 * maybe_create_snapshot() passes MAX_SNAPSHOTS - 1 instead, because it inserts a row
+	 * straight afterwards and that row is the one that fills the cap.
+	 *
+	 * @param int      $survey_id Survey ID.
+	 * @param int|null $keep      How many rows to keep. Null means MAX_SNAPSHOTS.
+	 * @return int Rows deleted.
 	 */
-	public static function cleanup_snapshots( $survey_id ) {
+	public static function cleanup_snapshots( $survey_id, $keep = null ) {
 		global $wpdb;
 
-		// Get IDs to keep (newest MAX_SNAPSHOTS)
+		$keep = null === $keep ? self::MAX_SNAPSHOTS : (int) $keep;
+
+		// Keeping nothing. The "newest $keep" read below would return no ids, and the
+		// empty-result guard after it returns without deleting — so a cap of 1 (which
+		// reaches here as $keep = 0) would let the table grow instead of pruning it.
+		// Delete every snapshot/manual row of this survey instead.
+		if ( $keep < 1 ) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
+			return (int) $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->prefix}surveyx_revisions
+                    WHERE survey_id = %d AND revision_type IN ('snapshot', 'manual')",
+					$survey_id
+				)
+			);
+		}
+
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 		$keep_ids = $wpdb->get_col(
 			$wpdb->prepare(
@@ -262,7 +290,7 @@ class SurveyX_Revisions {
                 ORDER BY created_at DESC
                 LIMIT %d",
 				$survey_id,
-				self::MAX_SNAPSHOTS
+				$keep
 			)
 		);
 
@@ -270,15 +298,12 @@ class SurveyX_Revisions {
 			return 0;
 		}
 
-		// $placeholders is a run of %d specifiers, one per (int-cast) id, so the IN()
-		// list is bound through prepare() rather than interpolated as raw values.
-		$keep_ids     = array_map( 'absint', $keep_ids );
+		// $placeholders contains only %d format specifiers, safely generated
 		$placeholders = implode( ',', array_fill( 0, count( $keep_ids ), '%d' ) );
 
 		$params = array_merge( [ $survey_id ], $keep_ids );
 
-		// IN() placeholders are bound via prepare(); table is a trusted $wpdb->prefix identifier.
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 		return $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->prefix}surveyx_revisions
@@ -288,7 +313,6 @@ class SurveyX_Revisions {
 				...$params
 			)
 		) ?: 0;
-		// phpcs:enable
 	}
 
 	/**
@@ -312,14 +336,8 @@ class SurveyX_Revisions {
 	}
 
 	/**
-	 * Update temp IDs to real IDs in all revisions for a survey.
-	 *
-	 * Decodes each revision blob, walks it, and remaps only the values that exactly
-	 * equal a generated temp-id token (question/answer ids and any nested reference to
-	 * them, e.g. skip-logic jump targets), then re-encodes. This replaced a blind
-	 * str_replace over the raw JSON so a temp-id token that happens to appear inside
-	 * user content (a title or label) can no longer be corrupted, while still covering
-	 * every id-bearing field the previous approach did.
+	 * Update temp IDs to real IDs in all revisions for a survey
+	 * Uses string replacement for efficiency - replaces all occurrences in JSON
 	 *
 	 * @param int   $survey_id  Survey ID
 	 * @param array $id_mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
@@ -329,30 +347,32 @@ class SurveyX_Revisions {
 		global $wpdb;
 		$table = $wpdb->prefix . 'surveyx_revisions';
 
-		// Skip if no mappings
 		if ( empty( $id_mapping['questions'] ) && empty( $id_mapping['answers'] ) ) {
 			return 0;
 		}
 
-		// One temp-id => real-id lookup covering both questions and answers. Temp ids
-		// are globally unique so the union is unambiguous. Values are cast to string to
-		// keep the id shape the editor already stores (the old str_replace also wrote
-		// the real id back as a quoted string).
-		$map = [];
-		foreach ( [ 'questions', 'answers' ] as $group ) {
-			if ( empty( $id_mapping[ $group ] ) ) {
-				continue;
-			}
-			foreach ( $id_mapping[ $group ] as $temp_id => $real_id ) {
-				$map[ (string) $temp_id ] = (string) $real_id;
+		$search  = [];
+		$replace = [];
+
+		if ( ! empty( $id_mapping['questions'] ) ) {
+			foreach ( $id_mapping['questions'] as $temp_id => $real_id ) {
+				// Match both "id":"temp-xxx" and "question_id":"temp-xxx"
+				$search[]  = '"' . $temp_id . '"';
+				$replace[] = '"' . $real_id . '"';
 			}
 		}
 
-		if ( empty( $map ) ) {
+		if ( ! empty( $id_mapping['answers'] ) ) {
+			foreach ( $id_mapping['answers'] as $temp_id => $real_id ) {
+				$search[]  = '"' . $temp_id . '"';
+				$replace[] = '"' . $real_id . '"';
+			}
+		}
+
+		if ( empty( $search ) ) {
 			return 0;
 		}
 
-		// Get all revisions for this survey
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 		$revisions = $wpdb->get_results(
 			$wpdb->prepare(
@@ -364,22 +384,14 @@ class SurveyX_Revisions {
 		$updated_count = 0;
 
 		foreach ( $revisions as $rev ) {
-			$decoded = json_decode( $rev->data, true );
+			$original_data = $rev->data;
+			$updated_data  = str_replace( $search, $replace, $original_data );
 
-			// Leave anything that isn't a decodable structure untouched.
-			if ( ! is_array( $decoded ) ) {
-				continue;
-			}
-
-			$changed  = false;
-			$remapped = self::remap_ids( $decoded, $map, $changed );
-
-			// Only update if something changed
-			if ( $changed ) {
+			if ( $updated_data !== $original_data ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB
 				$wpdb->update(
 					$table,
-					[ 'data' => wp_json_encode( $remapped ) ],
+					[ 'data' => $updated_data ],
 					[ 'id' => $rev->id ],
 					[ '%s' ],
 					[ '%d' ]
@@ -389,33 +401,5 @@ class SurveyX_Revisions {
 		}
 
 		return $updated_count;
-	}
-
-	/**
-	 * Recursively remaps scalar id values inside a decoded revision structure.
-	 *
-	 * Only string values that EXACTLY equal a temp-id token are replaced, so id
-	 * fields (and nested references to them) are remapped while free text is left
-	 * alone. $changed is set true when at least one value was replaced.
-	 *
-	 * @param mixed  $data    Decoded value (array/scalar).
-	 * @param array  $map     temp_id => real_id lookup.
-	 * @param bool   $changed Set by reference when a replacement occurs.
-	 * @return mixed The remapped value.
-	 */
-	private static function remap_ids( $data, $map, &$changed ) {
-		if ( is_array( $data ) ) {
-			foreach ( $data as $key => $value ) {
-				$data[ $key ] = self::remap_ids( $value, $map, $changed );
-			}
-			return $data;
-		}
-
-		if ( is_string( $data ) && isset( $map[ $data ] ) ) {
-			$changed = true;
-			return $map[ $data ];
-		}
-
-		return $data;
 	}
 }

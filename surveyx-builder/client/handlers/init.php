@@ -1,6 +1,5 @@
 <?php
 
-/** Don't load directly */
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
@@ -11,6 +10,30 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 	 * @since 1.0.0
 	 */
 	class SurveyX_Init_Handler {
+
+		/**
+		 * Concrete full-page cover layouts the client can render.
+		 *
+		 * 'stacked' (image above content), 'split_left' / 'split_right' (image beside
+		 * it), 'fullscreen' (full-bleed background BEHIND the content).
+		 *
+		 * Every layout but 'stacked' needs `content.image_url`, and the client degrades
+		 * to 'stacked' when the survey has no cover image. That gate lives on the
+		 * FRONT-END on purpose, so this payload keeps reporting the author's actual
+		 * choice rather than a substituted one.
+		 *
+		 * @var string[]
+		 */
+		const COVER_LAYOUTS = [ 'stacked', 'split_left', 'split_right', 'fullscreen' ];
+
+		/**
+		 * Estimated-completion-time bounds and the fallback amount. The admin editor
+		 * clamps the input to the same range, so anything outside it can only reach
+		 * the database through a hand edit or an import.
+		 */
+		const COVER_TIME_MIN     = 1;
+		const COVER_TIME_MAX     = 999;
+		const COVER_TIME_DEFAULT = 30;
 
 		/**
 		 * Allowed HTML tags for wp_kses sanitization.
@@ -51,19 +74,13 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 * @return WP_REST_Response Response with single survey data or 404 error.
 		 */
 		public static function handle( WP_REST_Request $request ) {
-			// Parse request parameters
 			$params = static::parse_request_params( $request );
 
-			// Rate limit: burst protection on session creation / view inflation.
-			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'init', $params['respondent_id'], 30, 60 );
-			if ( is_wp_error( $rate_check ) ) {
-				return SurveyX_Validation_Helper::error_response( $rate_check );
-			}
-
-			// Fast reject: a respondent_id was sent but is malformed (garbage/injection
-			// attempt). Absent ids are left to init() so require_logged_in surveys still
-			// work. Short-circuits the get_survey_init_data() JOIN for junk input while
-			// matching the existing null-init response shape exactly.
+			// Fast reject for a respondent_id that was SENT but is malformed; an absent id
+			// is left to init() so require_logged_in surveys still work. Skips the
+			// get_survey_init_data() JOIN while matching init()'s null response shape
+			// exactly. Must stay BEFORE the rate limiter, so junk cannot make us write
+			// limiter transients.
 			if ( ! empty( $params['respondent_id_invalid'] ) ) {
 				return new WP_REST_Response(
 					[
@@ -73,19 +90,30 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				);
 			}
 
-			// Process single survey
+			// Burst protection on session creation / view inflation. The IP bucket runs
+			// FIRST and leaves respondent_id out of its key, so minting a fresh UUID per
+			// request cannot buy a fresh bucket (same pattern as /upload).
+			$ip_rate_check = SurveyX_Validation_Helper::check_rate_limit( 'init_ip', '', SurveyX_Validation_Helper::RATE_INIT_IP, SurveyX_Validation_Helper::RATE_WINDOW );
+			if ( is_wp_error( $ip_rate_check ) ) {
+				return SurveyX_Validation_Helper::error_response( $ip_rate_check );
+			}
+
+			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'init', $params['respondent_id'], SurveyX_Validation_Helper::RATE_INIT, SurveyX_Validation_Helper::RATE_WINDOW );
+			if ( is_wp_error( $rate_check ) ) {
+				return SurveyX_Validation_Helper::error_response( $rate_check );
+			}
+
 			$survey_result = static::init(
 				$params['survey_id'],
 				$params['respondent_id'],
 				$params['captcha_token']
 			);
 
-			// Captcha or other validation failure - do NOT create the session
+			// A captcha or validation failure must NOT create the session.
 			if ( is_wp_error( $survey_result ) ) {
 				return SurveyX_Validation_Helper::error_response( $survey_result );
 			}
 
-			// If survey not found, return error
 			if ( null === $survey_result ) {
 				return new WP_REST_Response(
 					[
@@ -95,7 +123,6 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				);
 			}
 
-			// Return survey data directly without wrapper
 			return new WP_REST_Response( $survey_result, 200 );
 		}
 
@@ -111,9 +138,9 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 			$respondent_id_raw = $request->get_param( 'respondent_id' );
 			$respondent_id     = $respondent_id_raw ? SurveyX_Validation_Helper::sanitize_uuid( $respondent_id_raw ) : '';
 
-			// A non-empty raw value that sanitizes to '' is a garbage/injection
-			// attempt (present-but-malformed). An absent id is NOT flagged here so
-			// require_logged_in surveys still flow through init() as before.
+			// A non-empty raw value that sanitizes to '' is present-but-malformed. An
+			// ABSENT id is deliberately not flagged, so require_logged_in surveys still
+			// flow through init().
 			$respondent_id_invalid = ! empty( $respondent_id_raw ) && '' === $respondent_id;
 
 			$captcha_token = sanitize_text_field( (string) $request->get_param( 'captcha_token' ) );
@@ -136,7 +163,6 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 */
 		protected static function init( $survey_id, $respondent_id, $captcha_token = '' ) {
 
-			// Combined query
 			$data = SurveyX_Db::get_survey_init_data( $survey_id, $respondent_id );
 
 			if ( ! $data ) {
@@ -145,17 +171,16 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 
 			$survey = $data['survey'];
 
-			// Check authentication requirements
 			$require_logged_in = rest_sanitize_boolean( $survey->settings['require_logged_in'] ?? false );
 
 			$is_logged_in = is_user_logged_in();
 
-			// The survey page HTML no longer embeds a per-user REST nonce (kept generic
-			// so full-page caches are safe), so the first /init arrives with no
-			// X-WP-Nonce header and WP's rest_cookie_check_errors() has reset the current
-			// user to 0. For login-required surveys, re-derive the logged-in user straight
-			// from the auth cookie for this read-only request. The authoritative, always
-			// correct nonce for subsequent authenticated calls is returned in `rest_nonce`.
+			// The page HTML embeds no per-user REST nonce (kept generic so full-page
+			// caches are safe), so the first /init arrives without X-WP-Nonce and
+			// rest_cookie_check_errors() has already reset the current user to 0. For
+			// login-required surveys, re-derive the user from the auth cookie for this
+			// read-only request; `rest_nonce` below carries the real nonce for later
+			// authenticated calls.
 			if ( $require_logged_in && ! $is_logged_in ) {
 				$cookie_user_id = wp_validate_auth_cookie( '', 'logged_in' );
 				if ( $cookie_user_id ) {
@@ -164,36 +189,31 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				}
 			}
 
-			// Early return if authentication requirements are not met
 			if ( $require_logged_in && ! $is_logged_in ) {
-				return null; // User must be logged in but isn't
+				return null;
 			}
 
 			if ( ! $require_logged_in && empty( $respondent_id ) ) {
-				return null; // Anonymous access requires valid respondent_id
+				return null;
 			}
 
-			// Get session
 			$session = SurveyX_Session_Manager::get_active_session( $survey_id, $respondent_id );
 
-			// Handle expired session - reset to fresh state, then re-read the row so
-			// the in-memory session reflects the canonical reset without hand-patching
-			// each column here (kept consistent with set_session_state()).
 			if ( $session && 'expired' === $session->session_status ) {
 				SurveyX_Session_Manager::reset_expired_session( $session->id, $respondent_id );
-				$data['responses'] = [];
-				$session           = SurveyX_Session_Manager::get_active_session( $survey_id, $respondent_id );
+				$data['responses']            = [];
+				$session->session_status      = 'viewed';
+				$session->current_question_id = 0;
+				$session->progress_percentage = 0;
+				$session->restart_pending     = 0;
 			}
 
-			// Get voted data based on respondent_id
 			$voted_data = static::get_voted_data( $data, $respondent_id );
 
-			// Build frontend settings
 			$frontend_settings = static::build_frontend_settings( $survey );
 
 			$session_status = $session ? $session->session_status : null;
 
-			// Prepare response data
 			$response_data = [
 				'settings'            => $frontend_settings,
 				'questions'           => $data['questions'] ?? [],
@@ -202,18 +222,17 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				'session_status'      => $session_status,
 				'restart_pending'     => $session ? (bool) $session->restart_pending : false,
 				'current_question_id' => $session ? (int) $session->current_question_id : 0,
-				// Fresh REST nonce for login-required surveys, delivered via this (never
-				// page-cached) POST response so every logged-in user gets their own valid
-				// nonce for later authenticated requests. Null for public surveys.
+				// Delivered via this POST response, which is never page-cached, so every
+				// logged-in user gets their own nonce. NULL on public surveys - no code
+				// path may assume a nonce exists there.
 				'rest_nonce'          => $require_logged_in ? wp_create_nonce( 'wp_rest' ) : null,
 			];
 
-			// Create session if it doesn't exist
 			if ( ! $session && ! empty( $data['questions'] ) ) {
-				// Enforce captcha at session start. Captcha enablement/keys/secret live in the
-				// GLOBAL plugin settings (the same source the front-end widget reads via the
-				// shortcode), not in the per-survey settings row — so resolve from there or the
-				// check silently no-ops and bots can POST straight to /init.
+				// Captcha is enforced at session start. Its enablement/keys/secret live in
+				// the GLOBAL plugin settings - the same source the front-end widget reads -
+				// NOT in the per-survey settings row; resolving from the wrong one makes the
+				// check silently no-op and lets bots POST straight to /init.
 				$captcha_check = static::verify_captcha( SurveyX_Db::get_settings(), $captcha_token );
 				if ( is_wp_error( $captcha_check ) ) {
 					return $captcha_check;
@@ -235,9 +254,8 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		/**
 		 * Verify the captcha token when the survey has a captcha configured.
 		 *
-		 * Called at session start so bots cannot bypass the widget by POSTing
-		 * directly to /init. When no captcha is enabled for the survey this
-		 * is a no-op and returns true.
+		 * Called at session start so bots cannot bypass the widget by POSTing straight
+		 * to /init. A no-op returning true when no captcha is enabled.
 		 *
 		 * @param array|object $settings      Full (unfiltered) survey settings.
 		 * @param string       $captcha_token Captcha response token from the client.
@@ -290,9 +308,10 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		}
 
 		/**
-		 * Get voted data for current respondent.
-		 * Uses only respondent_id to filter responses, regardless of authentication status.
-		 * Removes sensitive fields before returning to client.
+		 * Get voted data for the current respondent.
+		 *
+		 * Scoped by respondent_id alone, regardless of authentication status, and
+		 * stripped of sensitive fields before it reaches the client.
 		 *
 		 * @param array  $survey_data   Survey data containing responses.
 		 * @param string $respondent_id Respondent UUID.
@@ -303,12 +322,11 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 				return [];
 			}
 
-			// Responses are already scoped to this respondent by the
-			// get_survey_init_data() query (WHERE respondent_id = %s), so no PHP
-			// re-filter is needed — just normalise to sequential keys.
+			// Already scoped to this respondent by get_survey_init_data()'s
+			// WHERE respondent_id = %s, so this only normalises to sequential keys.
 			$filtered = array_values( $survey_data['responses'] );
 
-			// Remove only respondent_id (sensitive), keep response_content for restoring answers
+			// Drop respondent_id only; response_content is needed to restore answers.
 			foreach ( $filtered as $vote ) {
 				unset( $vote->respondent_id );
 			}
@@ -323,7 +341,6 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 * @return array Frontend settings.
 		 */
 		protected static function build_frontend_settings( $survey ) {
-			// Get global settings for features like animation
 			$global_settings = get_option( 'surveyx_settings', [] );
 
 			$settings = $survey->settings;
@@ -358,6 +375,12 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 					'image_w'                => absint( $content['image_w'] ?? 0 ),
 					'image_h'                => absint( $content['image_h'] ?? 0 ),
 					'image_alt'              => esc_attr( $content['image_alt'] ?? '' ),
+					'cover_layout'           => static::resolve_cover_layout( $content, $global_settings ),
+					'show_cover_time'        => (bool) ( $content['show_cover_time'] ?? false ),
+					'cover_time_value'       => static::resolve_cover_time_value( $content ),
+					'cover_time_unit'        => in_array( $content['cover_time_unit'] ?? '', [ 'sec', 'min' ], true )
+						? $content['cover_time_unit']
+						: 'sec',
 					'closings'               => static::sanitize_closings( $content['closings'] ?? [] ),
 					'results'                => static::sanitize_results( $content['results'] ?? [] ),
 					'yes_cover'              => $content['yes_cover'] ?? false,
@@ -365,6 +388,67 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 					'start_button_title'     => esc_html( $content['start_button_title'] ?? 'Start' ),
 				],
 			];
+		}
+
+		/**
+		 * Resolves the concrete full-page cover layout the client should render.
+		 *
+		 * The payload always carries one of self::COVER_LAYOUTS, so the front-end never
+		 * has to interpret the 'default' sentinel itself.
+		 *
+		 * @param array $content         Survey content JSON (may be missing the key).
+		 * @param array $global_settings Global plugin settings blob.
+		 * @return string One of self::COVER_LAYOUTS; 'stacked' whenever nothing else applies.
+		 */
+		protected static function resolve_cover_layout( $content, $global_settings ) {
+			$stored = $content['cover_layout'] ?? '';
+
+			// An explicit concrete layout always wins.
+			if ( in_array( $stored, self::COVER_LAYOUTS, true ) ) {
+				return $stored;
+			}
+
+			// BACKWARD COMPATIBILITY: 'default' is an explicit opt-in and the ONLY value
+			// that follows the global default. Surveys saved before this feature carry no
+			// `cover_layout` key and must keep rendering stacked even after the owner
+			// picks a non-stacked global default - never treat an absent or unrecognised
+			// value as 'default'.
+			if ( 'default' !== $stored ) {
+				return 'stacked';
+			}
+
+			// The settings blob has no server-side allowlist, so clamp on consumption.
+			$global = $global_settings['default_cover_layout'] ?? '';
+
+			return in_array( $global, self::COVER_LAYOUTS, true ) ? $global : 'stacked';
+		}
+
+		/**
+		 * Resolves the estimated-completion-time amount rendered under the cover CTA.
+		 *
+		 * An ABSENT key (saved before the feature, or never touched) and a PRESENT but
+		 * unusable one both land on COVER_TIME_DEFAULT. Only a numeric value inside
+		 * COVER_TIME_MIN..COVER_TIME_MAX after an int cast is honoured - clamping instead
+		 * would fold blank, 0 and non-numeric to 1 ("Takes 1 sec") and absint() would
+		 * mirror a negative (-5 rendering as "Takes 5 sec"), making junk indistinguishable
+		 * from a real choice. is_numeric() rejects '', 'abc', arrays and booleans; the
+		 * explicit (int) cast keeps the sign absint() would drop.
+		 *
+		 * @param array $content Survey content JSON (may be missing the key).
+		 * @return int Amount between COVER_TIME_MIN and COVER_TIME_MAX.
+		 */
+		protected static function resolve_cover_time_value( $content ) {
+			if ( ! isset( $content['cover_time_value'] ) || ! is_numeric( $content['cover_time_value'] ) ) {
+				return self::COVER_TIME_DEFAULT;
+			}
+
+			$value = (int) $content['cover_time_value'];
+
+			if ( $value < self::COVER_TIME_MIN || $value > self::COVER_TIME_MAX ) {
+				return self::COVER_TIME_DEFAULT;
+			}
+
+			return $value;
 		}
 
 		/**
@@ -376,18 +460,17 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		 * @return bool True on success, false on failure.
 		 */
 		protected static function create_session( $survey_id, $respondent_id, $question_order ) {
-			// Get request data
-			$request_data = SurveyX_Request_Helper::get_request_data();
-
-			// Create session
+			// SurveyX_Request_Helper::get_request_data() is deliberately NOT called: Free never
+			// SELECTs from surveyx_respondents, so create_session() stores empty strings for
+			// ip_address, user_agent and location rather than collect what nothing can read.
 			$session_id = SurveyX_Session_Manager::create_session(
 				$survey_id,
 				$respondent_id,
 				$question_order,
-				$request_data
+				[]
 			);
 
-			// Increment view count only on success
+			// The view count moves only when a session was really created.
 			if ( $session_id ) {
 				SurveyX_Db::increment_view_count( $survey_id );
 				return true;

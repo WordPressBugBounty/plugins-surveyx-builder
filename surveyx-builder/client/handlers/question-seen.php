@@ -1,12 +1,10 @@
 <?php
 
-/** Don't load directly */
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 	/**
-	 * Handles the /question-seen endpoint - tracks when questions are viewed.
-	 * Creates a response record with 'seen' status.
+	 * Handles the /question-seen endpoint, recording a 'seen' response row.
 	 *
 	 * @since 1.0.0
 	 */
@@ -21,14 +19,12 @@ if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 		public static function handle( WP_REST_Request $request ) {
 			global $wpdb;
 
-			// Validate and parse request body
 			$body = SurveyX_Validation_Helper::validate_json_body( $request );
 
 			if ( is_wp_error( $body ) ) {
 				return SurveyX_Validation_Helper::error_response( $body );
 			}
 
-			// Extract and validate required fields
 			$survey_id = SurveyX_Validation_Helper::validate_survey_id( $body );
 			if ( is_wp_error( $survey_id ) ) {
 				return SurveyX_Validation_Helper::error_response( $survey_id );
@@ -50,25 +46,51 @@ if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 				);
 			}
 
-			// Rate limit: burst protection on analytics tracking writes.
-			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'question_seen', (string) $respondent_id, 90, 60 );
+			// Burst protection on analytics writes. The IP bucket runs FIRST and leaves
+			// respondent_id out of its key, so minting a fresh UUID per request cannot
+			// buy a fresh bucket (same pattern as /upload).
+			$ip_rate_check = SurveyX_Validation_Helper::check_rate_limit( 'question_seen_ip', '', SurveyX_Validation_Helper::RATE_QUESTION_SEEN_IP, SurveyX_Validation_Helper::RATE_WINDOW );
+			if ( is_wp_error( $ip_rate_check ) ) {
+				return SurveyX_Validation_Helper::error_response( $ip_rate_check );
+			}
+
+			$rate_check = SurveyX_Validation_Helper::check_rate_limit( 'question_seen', (string) $respondent_id, SurveyX_Validation_Helper::RATE_QUESTION_SEEN, SurveyX_Validation_Helper::RATE_WINDOW );
 			if ( is_wp_error( $rate_check ) ) {
 				return SurveyX_Validation_Helper::error_response( $rate_check );
 			}
 
-			// Get session identity + status only (analytics path needs nothing more)
+			// Scope the question to the request's survey, exactly as /progress does: a
+			// question_id belonging to another survey, or to none, would otherwise file a
+			// phantom 'seen' row under the caller's chosen survey_id and skew analytics.
+			if ( ! is_array( SurveyX_Db::get_question_content( $question_id, $survey_id ) ) ) {
+				return SurveyX_Validation_Helper::error_response(
+					new WP_Error(
+						'invalid_question_id',
+						esc_html__( 'Invalid question ID', 'surveyx-builder' ),
+						[ 'status' => 400 ]
+					)
+				);
+			}
+
+			/*
+			 * Identity + status only; the analytics path needs nothing more. The
+			 * 'completed' test MUST carry the same restart_pending exception /progress
+			 * uses: after Start Again the session is still 'completed' with
+			 * restart_pending = 1 while the respondent is already back on question 1.
+			 * Testing status alone wrote nothing for that whole window, so
+			 * current_question_id kept pointing at the previous run's last question and
+			 * drop-off analytics blamed it.
+			 */
 			$session = SurveyX_Session_Manager::get_session_id_status( $survey_id, $respondent_id );
-			if ( ! $session || 'completed' === $session->session_status ) {
+			if ( ! $session || ( 'completed' === $session->session_status && empty( $session->restart_pending ) ) ) {
 				return new WP_REST_Response( [ 'ok' => true ], 200 );
 			}
 
 			$now = surveyx_get_utc_now();
 
-			// Record a 'seen' response. Idempotent: create_seen_response only inserts
-			// when no response exists yet for this question, so navigating back to an
-			// already-viewed (or already-answered) question neither duplicates the
-			// 'seen' row nor overwrites an existing answer. Status is later promoted to
-			// 'answered'/'skipped_optional' by /progress.
+			// Idempotent: create_seen_response inserts only when no response exists yet,
+			// so navigating Back to an already-viewed or already-answered question neither
+			// duplicates the row nor overwrites the answer. /progress promotes the status.
 			SurveyX_Db::create_seen_response(
 				$session->id,
 				$survey_id,
@@ -78,13 +100,10 @@ if ( ! class_exists( 'SurveyX_Question_Seen_Handler', false ) ) {
 				$now
 			);
 
-			// Always advance current_question_id + last_activity_at, even when the
-			// question was already seen (Back navigation). Keeping current_question_id
-			// aligned with what the respondent is actually viewing is what makes
-			// drop-off analytics accurate: mark_stale_sessions_as_dropped leaves
-			// current_question_id untouched, and get_most_common_dropoff() groups
-			// dropped_off sessions by it to report where respondents abandon.
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// Always advance, even when the question was already seen (Back navigation):
+			// mark_stale_sessions_as_dropped leaves current_question_id untouched and
+			// get_most_common_dropoff() groups dropped_off sessions by it.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- per-request session write, caching it would defeat the purpose.
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$wpdb->prefix}surveyx_sessions

@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SurveyX Builder\n"
 "Report-Msgid-Bugs-To: https://themeruby.com/contact\n"
-"POT-Creation-Date: 2026-08-02 14:30:38+0000\n"
+"POT-Creation-Date: 2026-09-18 03:53:13+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: ThemeRuby <support@themeruby.com>\n"
@@ -12,6 +12,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: SurveyX POT Generator\n"
 "X-Domain: surveyx-builder\n"
 
@@ -55,6 +56,7 @@ msgid "More"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
 msgid "The request has timed out. Please try again."
 msgstr ""
 
@@ -219,6 +221,10 @@ msgid "saw this question"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "didn't answer"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "resp."
 msgstr ""
 
@@ -271,19 +277,20 @@ msgid "Load more"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "Collapse"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Expand"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
 msgid "An error occurred"
 msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Activate Survey"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Active"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Draft"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -303,7 +310,19 @@ msgid "View Documentation"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "Turn on Activate Survey to get the embed code."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Save the survey to generate its embed code."
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Embed to Website"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This survey has no standalone page. Place it with the shortcode below."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -320,10 +339,6 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Copy"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Please activate the survey first in the General panel to get the embed code."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -387,6 +402,10 @@ msgid "Unlock Pro including unlimited questions, advanced question types, skip l
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "An error occurred while fetching templates."
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Quick Vote"
 msgstr ""
 
@@ -400,6 +419,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Multiple question survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Multiple question survey. Available in Pro."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -451,11 +474,20 @@ msgid "Enter a name"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
 msgid "Continue"
 msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Please Enter The Survey Title before Submitting."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey \"%s\" created successfully."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Failed to create survey \"%s\"."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -531,6 +563,10 @@ msgid "Click to copy, double-click for details"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "View page"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "General"
 msgstr ""
 
@@ -543,6 +579,22 @@ msgid "Delete Survey"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "No surveys match your search"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Try a different word, or clear the search to see every survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Items per page:"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "of"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Quick Start"
 msgstr ""
 
@@ -552,14 +604,6 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Shuffle"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Expand"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Collapse"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -604,6 +648,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Show Other Option"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add an \"Other\" option with a text input for custom answers."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -708,7 +756,7 @@ msgid "Cancel"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Queston Type: "
+msgid "Question Type: "
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -802,6 +850,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Footer Branding Logo"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display \"Powered by SurveyX\" branding at the bottom of the survey."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -969,47 +1021,11 @@ msgid "Open the CTA link in a new browser tab."
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Activate Cover"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Display a call-to-action cover before the survey or survey begins."
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Cover Description"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Add additional details before users start the survey."
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Enter cover description…"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Cover Button"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Start Survey"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "A label for a button that starts a survey, Default is Start."
-msgstr ""
-
-#: assets/admin/bundle.js:1
 msgid "Start"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Title"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Cover "
+msgid "Welcome"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1026,6 +1042,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Untitled"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Are you sure you want to delete \"%s\"? All associated data will be permanently removed."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1105,14 +1125,6 @@ msgid "Last Updated"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Save the survey to generate its embed code."
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Turn on Activate Survey to get the embed code."
-msgstr ""
-
-#: assets/admin/bundle.js:1
 msgid "Autosaving..."
 msgstr ""
 
@@ -1138,6 +1150,26 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Enable"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Default (%s)"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enabled"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Disabled"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Always on"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Shortcode only"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1181,6 +1213,7 @@ msgid "Display a button in results page allowing users to view detailed vote sta
 msgstr ""
 
 #: assets/admin/bundle.js:1
+#: client/form-shortcode.php
 msgid "Login Required to Vote"
 msgstr ""
 
@@ -1194,6 +1227,22 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "When enabled, adding or deleting questions/answers will clear all previous responses, allowing users to vote again."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Page URL"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Controls whether this survey is reachable at its own standalone page address, on top of the shortcode. Default follows the site-wide Survey Page setting; the other two override it for this survey only."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Integrations"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Connect this survey to external services: webhooks, Zapier/Make and Google Sheets."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1245,15 +1294,77 @@ msgid "Enter result description…"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "sec"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+#: assets/client/bundle.js:1
+msgid "min"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Shown under the start button as “Takes %1$s %2$s”."
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Survey Title"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "This title will be displayed to participants and should accurately reflect the purpose or question of your survey."
+msgid "Heads the welcome screen when the cover is on; otherwise it is only the survey’s internal name."
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Import Now"
+msgid "Activate Cover"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Display a call-to-action screen before the survey begins."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Description"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Add additional details before users start the survey."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Enter cover description…"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Full-page Cover Layout"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Standalone survey page only — an embedded shortcode always stays stacked."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Button"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Start Survey"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "A label for a button that starts a survey, Default is Start."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Estimated Time"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Tell participants how long the survey takes, right under the start button."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Duration"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1289,6 +1400,22 @@ msgid "The template could not be found."
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "Purpose"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Role"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Topic"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Filter templates"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "All Templates"
 msgstr ""
 
@@ -1305,7 +1432,7 @@ msgid "All"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Free"
+msgid "Basic"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1329,12 +1456,42 @@ msgid "Personality"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "Clear filters"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Refreshing..."
 msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Refresh"
 msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Loading templates..."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No templates match these filters"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Try removing a filter, or start over from the full library."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "No templates are available right now. Try refreshing."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Clear all filters"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "%d template found"
+msgid_plural "%d templates found"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "Loading preview..."
@@ -1346,6 +1503,22 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Upgrade Pro"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Stacked"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Image left"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Image right"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Full screen"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1370,11 +1543,11 @@ msgid "No results found"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Items per page:"
+msgid "Share this link directly — no shortcode needed."
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "of"
+msgid "Copy link"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1419,6 +1592,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Changing to an input type will hide existing answers. Do you want to continue?"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Changing to Yes/No will replace all existing answers with \"Yes\" and \"No\". Do you want to continue?"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1486,15 +1663,15 @@ msgid "File Upload"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Welcome"
-msgstr ""
-
-#: assets/admin/bundle.js:1
 msgid "Statement"
 msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Ending"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "View-based rates are unavailable: this survey has recorded more starts than views. The view counter is a running total and is not reduced when sessions or responses are deleted."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1610,6 +1787,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Failed to load surveys"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Are you sure you want to delete \"%s\"? All associated vote data will also be permanently removed."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1781,23 +1962,23 @@ msgid "Email Notifications"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Get notified instantly when someone completes your survey with detailed response summaries."
+msgid "Get an email at the address you choose as soon as someone completes your survey."
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Instant completion alerts"
+msgid "Fires on every completed response"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Multiple recipients support"
+msgid "Insert the survey name and respondent details"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Response summary in email"
+msgid "Write your own subject, title and message"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Customizable email templates"
+msgid "Sent in the background, never delays a submission"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1894,11 +2075,63 @@ msgid "Time-sensitive campaigns"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "Webhooks & Zapier"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Send survey responses to any external URL the moment a response is completed. Paste a Zapier/Make Catch Hook URL to connect thousands of apps."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Per-survey webhook endpoints"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Fires on response completion"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "HMAC-signed, secure delivery"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Optional respondent contact info"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Google Sheets"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Send each completed response to a Google Sheet — no Zapier needed."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "One new row per completed response"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Columns follow your question titles"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Secure signed delivery with a shared secret"
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Pro Question Types"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Unlock powerful question types including file upload, matrix, ranking, and more."
+msgid "Unlock six more question types on top of the seven in the basic plugin."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Rating and 0-10 opinion scale (NPS)"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Contact info and date questions"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -1906,15 +2139,7 @@ msgid "File upload questions"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Matrix/grid questions"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Ranking questions"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Image choice questions"
+msgid "Matrix / Likert grid questions"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -2163,31 +2388,45 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "%d survey exported"
-msgstr ""
+msgid_plural "%d surveys exported"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "%d question"
-msgstr ""
+msgid_plural "%d questions"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "%d item"
-msgstr ""
+msgid_plural "%d items"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "Import %d survey"
-msgstr ""
+msgid_plural "Import %d surveys"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "%d survey imported successfully."
-msgstr ""
+msgid_plural "%d surveys imported successfully."
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "%d image"
-msgstr ""
+msgid_plural "%d images"
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "%d survey could not be imported."
-msgstr ""
+msgid_plural "%d surveys could not be imported."
+msgstr[0] ""
+msgstr[1] ""
 
 #: assets/admin/bundle.js:1
 msgid "This page could not be found."
@@ -2207,6 +2446,18 @@ msgid "Full size (original)"
 msgstr ""
 
 #: assets/admin/bundle.js:1
+msgid "The URL base cannot be empty."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This value leaves no usable URL base. Use letters or numbers."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "This URL base is reserved by WordPress. Please choose another one."
+msgstr ""
+
+#: assets/admin/bundle.js:1
 msgid "Off"
 msgstr ""
 
@@ -2220,6 +2471,22 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "reCAPTCHA v2 integration for spam protection."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Alphabet Labels"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Animation"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Cover Layout"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Branding"
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -2244,6 +2511,10 @@ msgstr ""
 
 #: assets/admin/bundle.js:1
 msgid "Connect reCAPTCHA v2, Cloudflare Turnstile, enable email sending, and create new custom themes."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Connect reCAPTCHA v2 and configure how your surveys behave."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -2287,14 +2558,6 @@ msgid "Enter your secret key"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Integrations"
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Branding"
-msgstr ""
-
-#: assets/admin/bundle.js:1
 msgid "Appearance"
 msgstr ""
 
@@ -2319,11 +2582,35 @@ msgid "The previously selected image size is no longer available. Full-size imag
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Skip Question Cover Images on Import"
+msgid "Default Cover Layout"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "Recommended. When importing a template or survey, do not import the cover image on each question. This makes imports faster and more reliable."
+msgid "Applies to every survey whose cover layout is set to Default. Standalone survey page only — an embedded shortcode always stays stacked."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Page"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Give every active survey its own standalone page, so it can be shared as a link. When off, surveys are only reachable through the [surveyx] shortcode and their page addresses return 404."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Survey Page URL Base"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "The first segment of the address every survey gets its own page at. After a change, the most recent previous address keeps redirecting to the new one."
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Example:"
+msgstr ""
+
+#: assets/admin/bundle.js:1
+msgid "Your site uses plain permalinks, so survey pages are served from a query string and this base is not used yet."
 msgstr ""
 
 #: assets/admin/bundle.js:1
@@ -2340,15 +2627,11 @@ msgid "Survey Not Found"
 msgstr ""
 
 #: assets/admin/bundle.js:1
-msgid "An error occurred while fetching templates."
-msgstr ""
-
-#: assets/admin/bundle.js:1
-msgid "Loading templates..."
-msgstr ""
-
-#: assets/admin/bundle.js:1
 msgid "Create and manage custom themes to match your brand identity and style preferences."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "This survey is closed."
 msgstr ""
 
 #: assets/client/bundle.js:1
@@ -2386,6 +2669,10 @@ msgid "Vote Results"
 msgstr ""
 
 #: assets/client/bundle.js:1
+msgid "Close"
+msgstr ""
+
+#: assets/client/bundle.js:1
 msgid "Loading results..."
 msgstr ""
 
@@ -2394,11 +2681,31 @@ msgid "No votes yet."
 msgstr ""
 
 #: assets/client/bundle.js:1
+msgid "vote"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "votes"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "That text does not match one single option. Please choose one from the list, or clear the field."
+msgstr ""
+
+#: assets/client/bundle.js:1
 msgid "Type or select an option"
 msgstr ""
 
 #: assets/client/bundle.js:1
 msgid "Show options"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Options"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Answer options"
 msgstr ""
 
 #: assets/client/bundle.js:1
@@ -2426,11 +2733,23 @@ msgid "options"
 msgstr ""
 
 #: assets/client/bundle.js:1
+msgid "Dismiss"
+msgstr ""
+
+#: assets/client/bundle.js:1
 msgid "View Chart Result"
 msgstr ""
 
 #: assets/client/bundle.js:1
-msgid "Dismiss"
+msgid "Takes %s"
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Your answer could not be saved. Please try again."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "Try again"
 msgstr ""
 
 #: assets/client/bundle.js:1
@@ -2470,10 +2789,6 @@ msgid "1 vote"
 msgstr ""
 
 #: assets/client/bundle.js:1
-msgid "votes"
-msgstr ""
-
-#: assets/client/bundle.js:1
 msgid "Thank You"
 msgstr ""
 
@@ -2485,6 +2800,14 @@ msgstr ""
 msgid "View Results"
 msgstr ""
 
+#: assets/client/bundle.js:1
+msgid "This question cannot be displayed."
+msgstr ""
+
+#: assets/client/bundle.js:1
+msgid "You can continue without answering it."
+msgstr ""
+
 #: admin/admin-menu.php
 msgid "Surveys"
 msgstr ""
@@ -2494,15 +2817,21 @@ msgid "Get SurveyX Pro"
 msgstr ""
 
 #: admin/admin-menu.php
+msgid "Dismiss this notice"
+msgstr ""
+
+#: admin/admin-menu.php
 msgid "SurveyX"
 msgstr ""
 
-#: admin/api-endpoints.php
-msgid "This survey uses Pro features. Please activate SurveyX Pro to edit it."
-msgstr ""
+#: admin/admin-menu.php
+msgid "SurveyX Builder: %d published survey was built with Pro features and needs SurveyX Builder Pro to display. Until Pro is active, its page and shortcode show nothing to visitors."
+msgid_plural "SurveyX Builder: %d published surveys were built with Pro features and need SurveyX Builder Pro to display. Until Pro is active, their pages and shortcodes show nothing to visitors."
+msgstr[0] ""
+msgstr[1] ""
 
 #: admin/api-endpoints.php
-msgid "Invalid request data."
+msgid "This survey uses Pro features. Please activate SurveyX Pro to edit it."
 msgstr ""
 
 #: admin/api-endpoints.php
@@ -2515,6 +2844,10 @@ msgstr ""
 
 #: admin/api-endpoints.php
 msgid "Failed to load survey."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "The survey you are looking for could not be found."
 msgstr ""
 
 #: admin/api-endpoints.php
@@ -2558,6 +2891,14 @@ msgid "Survey \"%s\" was deleted successfully."
 msgstr ""
 
 #: admin/api-endpoints.php
+msgid "Invalid request data."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Survey ID is missing or invalid."
+msgstr ""
+
+#: admin/api-endpoints.php
 msgid "No changes were made."
 msgstr ""
 
@@ -2574,7 +2915,7 @@ msgid "Error during saving survey. Please try again."
 msgstr ""
 
 #: admin/api-endpoints.php
-msgid "Error during saving questions and answers of the survey. Please try again."
+msgid "Automatic (answers medium, others full size)"
 msgstr ""
 
 #: admin/api-endpoints.php
@@ -2586,15 +2927,11 @@ msgid "%s updated successfully"
 msgstr ""
 
 #: admin/api-endpoints.php
-msgid "Templates retrieved successfully."
-msgstr ""
-
-#: admin/api-endpoints.php
 msgid "No templates available. Could not fetch from the remote server."
 msgstr ""
 
 #: admin/api-endpoints.php
-msgid "Docs retrieved successfully."
+msgid "Templates retrieved successfully."
 msgstr ""
 
 #: admin/api-endpoints.php
@@ -2602,11 +2939,15 @@ msgid "No docs available. Could not fetch from the remote server."
 msgstr ""
 
 #: admin/api-endpoints.php
-msgid "Notifications retrieved successfully."
+msgid "Docs retrieved successfully."
 msgstr ""
 
 #: admin/api-endpoints.php
 msgid "No notifications available."
+msgstr ""
+
+#: admin/api-endpoints.php
+msgid "Notifications retrieved successfully."
 msgstr ""
 
 #: admin/api-endpoints.php
@@ -2781,6 +3122,14 @@ msgstr ""
 msgid "Vote results are not enabled for this survey."
 msgstr ""
 
+#: client/client-services.php
+msgid "Updated %s ago"
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "This survey needs JavaScript to run. Please enable JavaScript in your browser, then reload this page."
+msgstr ""
+
 #: client/form-shortcode.php
 msgid "Survey ID Missing"
 msgstr ""
@@ -2806,6 +3155,14 @@ msgid "Survey ID %s exists but settings could not be loaded. This survey may onl
 msgstr ""
 
 #: client/form-shortcode.php
+msgid "Please log in to your account before voting on this survey. This ensures that each vote is counted fairly and securely."
+msgstr ""
+
+#: client/form-shortcode.php
+msgid "Log in"
+msgstr ""
+
+#: client/form-shortcode.php
 msgid "View Analytics"
 msgstr ""
 
@@ -2826,11 +3183,33 @@ msgid "Please complete the captcha challenge."
 msgstr ""
 
 #: client/handlers/progress.php
+msgid "Invalid answer selection"
+msgstr ""
+
+#: client/handlers/progress.php
+#: client/handlers/question-seen.php
+#: client/handlers/validation.php
+msgid "Invalid question ID"
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Invalid answer content"
+msgstr ""
+
+#: client/handlers/progress.php
 msgid "Session not found. Please refresh and try again."
 msgstr ""
 
 #: client/handlers/progress.php
+msgid "This survey session is already complete."
+msgstr ""
+
+#: client/handlers/progress.php
 msgid "Progress saved successfully!"
+msgstr ""
+
+#: client/handlers/progress.php
+msgid "Please select an answer"
 msgstr ""
 
 #: client/handlers/progress.php
@@ -2843,15 +3222,12 @@ msgid "Invalid respondent ID"
 msgstr ""
 
 #: client/handlers/validation.php
+#: client/rest-routes.php
 msgid "Invalid data"
 msgstr ""
 
 #: client/handlers/validation.php
 msgid "Invalid survey ID"
-msgstr ""
-
-#: client/handlers/validation.php
-msgid "Invalid question ID"
 msgstr ""
 
 #: client/handlers/validation.php
@@ -2862,36 +3238,28 @@ msgstr ""
 msgid "Too many requests. Please slow down and try again shortly."
 msgstr ""
 
-#: includes/db-migration.php
-msgid "performance indexes"
+#: client/public-page.php
+msgid "The URL base cannot be empty. The previous value was kept."
+msgstr ""
+
+#: client/public-page.php
+msgid "That URL base is reserved by WordPress. The previous value was kept."
+msgstr ""
+
+#: client/public-page.php
+msgid "A page with this slug already exists. Survey pages will take priority over it."
+msgstr ""
+
+#: client/rest-routes.php
+msgid "This survey is not available."
 msgstr ""
 
 #: includes/db-migration.php
-msgid "settings cleanup"
+msgid "SurveyX Builder: the database update could not be completed. It will be retried automatically. If it keeps failing, running any WP-CLI command retries it immediately with no time limit."
 msgstr ""
 
 #: includes/db-migration.php
-msgid "expired-session cleanup"
-msgstr ""
-
-#: includes/db-migration.php
-msgid "response de-duplication key"
-msgstr ""
-
-#: includes/db-migration.php
-msgid "viewed_at column fix"
-msgstr ""
-
-#: includes/db-migration.php
-msgid "drop-off path reconcile"
-msgstr ""
-
-#: includes/response-types.php
-msgid "Please select a rating"
-msgstr ""
-
-#: includes/response-types.php
-msgid "Please select an answer"
+msgid "SurveyX Builder: database updated."
 msgstr ""
 
 #: includes/review-notice.php

@@ -1,70 +1,87 @@
-=== SurveyX Builder - Easy Feedback, Poll, Quiz & Survey ===
+=== SurveyX Builder - Survey, Poll, Quiz & Feedback Form ===
 Contributors: themeruby
-Tags: poll, survey, quiz, form, feedback
+Tags: survey, poll, quiz, questionnaire, feedback
 Requires at least: 6.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 2.0.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-Create surveys, polls, quizzes, and feedback forms. Fast, lightweight, and optimized to boost responses and user engagement.
+WordPress survey plugin for surveys, polls, quizzes and feedback forms. Unlimited responses, stored in your own database. No code, no monthly fee.
 
 == Description ==
 
-[SurveyX Builder](https://surveyx.co/), the powerful WordPress survey creation plugin, empowers you to build beautiful surveys, polls, quizzes, and feedback forms effortlessly with its intuitive visual editor, no coding required.
+[SurveyX Builder](https://surveyx.co/) is a WordPress survey plugin for **surveys, polls, quizzes and feedback forms**. You build the survey in a visual editor, publish it, and every answer lands in your own WordPress database.
 
-Whether you're measuring customer satisfaction, conducting market research, or creating engaging quizzes, SurveyX Builder gives you everything you need with **unlimited surveys and unlimited responses** and completely free.
+No external survey service sits in the middle. That is why responses are unlimited on every plan, why there is no per-response pricing, and why nothing you collect ends up behind someone else's subscription.
 
-🎨 **Beautiful designs, ready to go**: Start in seconds with our [pre-built templates](https://surveyx.co/templates/). No design skills needed, just pick a template and customize it to match your brand.
+**What the free version does.** Unlimited surveys, unlimited responses, 7 question types, 6 themes, an analytics dashboard and spam protection. Free surveys hold **one question each**, which is the right shape for polls, quick votes and a single feedback prompt. [Pro](https://surveyx.co/pricing/) lifts that limit and adds skip logic, 6 more question types and the integrations.
 
-= 🎯 Why Choose SurveyX Builder? =
+= 🆕 New in 2.0: every survey gets its own page =
 
-* **Easy to Use**: Intuitive visual editor, no coding required
-* **Unlimited Everything**: No limits on surveys, questions, or responses
-* **Lightning Fast**: Lightweight code that won't slow down your site
-* **Beautiful Designs**: Professional themes that match any website
-* **Powerful Analytics**: Track responses and gain actionable insights
+Activate a survey and it is live at `/survey/123/your-survey-name/`. Paste that link into an email, a newsletter, a social post or a QR code. There is no page to build and no shortcode to embed.
+
+* Survey pages carry Open Graph and Twitter card tags, so a shared link unfurls with a title, description and preview image
+* The URL base (the "survey" part of the address) is configurable in Settings
+* Standalone pages can be switched off site-wide if you only ever embed with the shortcode
+* Free survey pages carry `noindex`, so they are for sharing a link rather than for ranking in search. [Pro](https://surveyx.co/pricing/) adds a per-survey indexing switch
+
+= 🎯 What you get =
+
+* **Unlimited surveys and unlimited responses**: no caps, no metering, no per-response fee
+* **Your data stays on your site**: responses live in your WordPress database, not someone else's cloud
+* **Two ways to publish**: the survey's own shareable page, or the `[surveyx id="X"]` shortcode
+* **Lightweight**: the public survey loads one small bundle, and only on pages that show a survey
+* **Works everywhere**: any properly coded theme, any page builder, responsive on a phone
 
 = ✨ Core Features =
 
-* **Unlimited Surveys & Responses**: Create as many surveys as you need
-* **5 Question Types**: Multiple choice, dropdown, text input, yes/no, image selection
-* **6 Pre-designed Themes**: Professional ready-to-use designs
-* **Analytics Dashboard**: Track responses and visualize insights
-* **reCAPTCHA Protection**: Built-in Google reCAPTCHA v2 spam prevention
-* **Shortcode Embedding**: Easy `[surveyx id="X"]` integration anywhere
-* **Revision History**: Autosave and restore previous versions
-* **Responsive Design**: Perfect on desktop, tablet, and mobile
-* **Translation Ready**: Works with WPML and other translation plugins
+* **7 question types**: multiple choice, multi-select, dropdown, text input, yes/no, image choice, multi-image choice
+* **Shareable survey pages**: `/survey/{id}/{slug}/` with social preview tags
+* **6 themes**: finished designs, ready to use as they are
+* **Analytics dashboard**: responses, completion rate and drop-off at a glance
+* **Vote results for respondents**: switch on "view votes in results" for a Quick Vote and voters can open the tally, their own vote already counted
+* **Google reCAPTCHA v2**: built-in spam protection
+* **Shortcode embedding**: `[surveyx id="X"]` in any post, page or widget
+* **Revision history**: autosave, with restore to any recent version
+* **Template library**: import a ready-made survey and edit it
+* **Turn the credit off**: the "Powered by SurveyX" line has a switch, in the free version too
+* **Translation ready**: works with WPML and other translation plugins
 
 = 🚀 SurveyX Pro Features =
 
-Take your surveys to the next level with powerful pro features:
+Pro is the same plugin with the limits lifted:
 
-* **9 Question Types [Pro]**: Rating scales, contact info, and more
-* **Multiple Questions [Pro]**: Allow multiple questions in one survey
-* **Respondent Information [Pro]**: Collect name, email, and custom fields
-* **Skip Logic & Branching [Pro]**: Create smart conditional survey flows
-* **Email Notifications [Pro]**: Get instant alerts for new responses
+* **Multiple Questions [Pro]**: Unlimited questions per survey, with page-by-page navigation
+* **13 Question Types [Pro]**: Adds rating, opinion scale (0 to 10, for NPS), matrix / Likert grid, date, file upload and contact info
+* **Skip Logic & Branching [Pro]**: Send respondents down different paths based on their answers
+* **Answer Recall [Pro]**: Pull an earlier answer into a later question, so a form reads like a conversation
+* **Save & Resume [Pro]**: A part-finished survey picks up where the respondent left off
+* **Contact Info Question [Pro]**: Builds a respondent profile with name, email, phone and company
+* **Email Notifications [Pro]**: One address is alerted as soon as someone completes a survey
 * **Mailchimp Integration [Pro]**: Sync respondents with your email list
-* **16+ Premium Themes [Pro]**: Extended design options for every style
-* **Custom Themes [Pro]**: Create your own branded survey designs
-* **Google Fonts [Pro]**: Access 1000+ fonts for beautiful typography
-* **Custom Backgrounds [Pro]**: Add images or colors to survey backgrounds
-* **Advanced Analytics [Pro]**: Detailed insights, charts, and response trends
-* **CSV Export [Pro]**: Download and analyze response data
-* **Custom Branding [Pro]**: Add your logo and brand identity to surveys
+* **Webhooks & Zapier [Pro]**: Post every completed response to any URL, HMAC-signed
+* **Google Sheets [Pro]**: Append each completed response to a sheet as a new row
+* **CSV Export [Pro]**: Download the summary and every individual response
+* **Survey Import & Export [Pro]**: Move whole surveys between sites as JSON
+* **Advanced Analytics [Pro]**: Per-question drop-off, every individual response, and all surveys in one table
+* **22 Themes [Pro]**: 16 more designs on top of the 6 included free
+* **Custom Themes [Pro]**: Build your own with colours, buttons, containers and typography
+* **Google Fonts [Pro]**: 1,000+ families for the survey's typography
+* **Custom Backgrounds [Pro]**: A solid colour, a gradient or an image behind the survey
+* **Your Own Branding [Pro]**: Replace the SurveyX credit with your logo, link and wording
 * **Gutenberg & Elementor Blocks [Pro]**: Native page builder integration
-* **Google reCAPTCHA v3 [Pro]**: Invisible spam protection, no user interaction
-* **Cloudflare Turnstile [Pro]**: Advanced privacy-friendly bot protection
+* **Google reCAPTCHA v3 [Pro]**: Invisible spam protection, with no challenge for real people
+* **Cloudflare Turnstile [Pro]**: A privacy-friendly alternative to reCAPTCHA
+* **Survey Page Options [Pro]**: Per-survey search indexing, and a redirect after someone submits
 * **Dedicated Support [Pro]**: Priority help through our [ticket system](https://ruby.ticksy.com/)
 
 **[Get SurveyX Builder Pro →](https://surveyx.co/pricing/)**
 
 = 📚 Template Library =
 
-📋 **100+ ready-to-use templates**: Customer feedback, quizzes, HR surveys, event forms, market research, and more. Browse our [Template Library](https://surveyx.co/templates/) and start in seconds.
+📋 **250+ ready-to-use templates**: customer feedback, quizzes, HR surveys, event forms, market research and more. Browse the [Template Library](https://surveyx.co/templates/), open one, and change the questions to yours.
 
   * Customer Feedback & Satisfaction Surveys
   * Knowledge Quizzes & Personality Tests
@@ -82,10 +99,10 @@ Take your surveys to the next level with powerful pro features:
 
 == Installation ==
 
-1. Upload the plugin files to `/wp-content/plugins/surveyx-builder/` or install through the WordPress plugins screen.
+1. Upload the plugin files to `/wp-content/plugins/surveyx-builder/`, or install it through the WordPress plugins screen.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
-3. Navigate to SurveyX in the admin menu to create your first survey.
-4. Use the shortcode `[surveyx id="X"]` to embed surveys in posts or pages.
+3. Go to SurveyX in the admin menu and create your first survey.
+4. Activate the survey, then either share its page link or embed it with `[surveyx id="X"]`.
 
 == External Services ==
 
@@ -99,58 +116,114 @@ This plugin connects to the following external services:
 
 == Screenshots ==
 
-1. Survey image select types
-2. Survey selection types
-3. Survey rating types
-4. Survey editor interface
+1. Image choice question as respondents see it
+2. Multiple choice question with a custom theme
+3. Rating question (Pro) on the survey page
+4. The survey editor: questions, answers and live preview
 
 == Frequently Asked Questions ==
 
-= How do I embed a survey? =
+= How do I add a survey to my site? =
 
-Use the shortcode `[surveyx id="X"]` where X is your survey ID. You can find the ID in the survey list or copy it directly from the survey editor.
+Two ways. Activate the survey and share its own page link (`/survey/123/your-survey/`), or embed it in any post, page or page builder with the shortcode `[surveyx id="X"]`, where X is the survey ID shown in the survey list.
 
-= Is SurveyX free? =
+= Can I share a survey without building a page for it? =
 
-Yes! SurveyX Builder is completely free with unlimited surveys and responses. A [Pro version](https://surveyx.co/pricing/) is available with advanced features like skip logic, email notifications, and more question types.
+Yes. Since version 2.0 every active survey has its own page at `/survey/{id}/{slug}/`. Copy the link from Survey > Share and send it out. Nothing else to set up.
+
+= Is SurveyX Builder really free? =
+
+Yes. The free version creates unlimited surveys and collects unlimited responses, with no metering and no per-response fees. A [Pro version](https://surveyx.co/pricing/) adds multi-question surveys, skip logic, more question types, integrations and CSV export.
 
 = What question types are supported? =
 
-Free version includes: multiple choice, dropdown, text input, yes/no, and image selection. [Pro version](https://surveyx.co/pricing/) adds rating scales, NPS, matrix questions, and more.
+The free version includes 7: multiple choice, multi-select, dropdown, text input, yes/no, image choice and multi-image choice. [Pro](https://surveyx.co/pricing/) adds 6 more for 13 in total: rating, opinion scale, matrix / Likert grid, date, file upload and contact info.
+
+= How many questions can one survey have? =
+
+The free version builds single-question surveys, which covers polls, quick votes and one-question feedback prompts. [Pro](https://surveyx.co/pricing/) removes the limit and adds page-by-page navigation and skip logic.
+
+= Where are the responses stored, and what about GDPR? =
+
+In your own WordPress database, on your own hosting. Nothing is sent to an external survey service, so there is no third-party processor to account for and no export to request back. What you then do with that data is still your own responsibility.
 
 = Can I customize the survey design? =
 
-Yes! SurveyX includes 6 predefined themes in the free version. [Pro users](https://surveyx.co/pricing/) get 16+ themes plus the ability to create custom branded designs.
+Yes. The free version ships 6 themes. [Pro](https://surveyx.co/pricing/) brings the total to 22, plus custom themes, Google Fonts, background images and your own logo.
 
-= Does it work with my theme? =
+= Does it work with my theme and page builder? =
 
-SurveyX Builder is designed to work with any properly coded WordPress theme. Surveys are fully responsive and adapt to all screen sizes.
+Yes. Surveys are responsive and work with any properly coded theme. Use the shortcode in any page builder; [Pro](https://surveyx.co/pricing/) also includes a native Gutenberg block and Elementor widget.
 
-= Is it compatible with page builders? =
+= Will it slow down my site? =
 
-Yes! Use the shortcode `[surveyx id="X"]` in any page builder. [Pro version](https://surveyx.co/pricing/) includes native Gutenberg and Elementor blocks.
+No. The survey bundle is small and self-contained, and it only loads on pages that actually show a survey.
 
 = How do I prevent spam submissions? =
 
-SurveyX supports Google reCAPTCHA v2 for spam protection (free). [Pro users](https://surveyx.co/pricing/) also get Cloudflare Turnstile integration.
+The free version includes Google reCAPTCHA. [Pro](https://surveyx.co/pricing/) adds reCAPTCHA v3 and Cloudflare Turnstile for invisible, privacy-friendly protection.
 
 = Can I export survey results? =
 
-View analytics in the dashboard. [Pro version](https://surveyx.co/pricing/) includes CSV export for detailed analysis.
+The dashboard shows responses, completion rate and drop-off. [Pro](https://surveyx.co/pricing/) adds CSV export of both the summary and every individual response.
 
 = Does it support multiple languages? =
 
-Yes, SurveyX Builder is translation-ready and works with WPML and other translation plugins.
+Yes. SurveyX Builder is translation ready and works with WPML and other translation plugins.
+
+= Is this an alternative to Typeform, Google Forms or SurveyMonkey? =
+
+It is the WordPress-native way to do the same job. The survey runs on your own domain, wears your own theme, and the answers sit in your WordPress database instead of an account somewhere else. What you give up is the hosted part: the hosting, the backups and the uptime are yours to run.
+
+= Can I run an NPS survey? =
+
+Yes, with [Pro](https://surveyx.co/pricing/). The 0 to 10 opinion scale is one of the six question types Pro adds. Pair it with an open text question and one form gives you the score and the reason behind it.
+
+= Can I import and export my surveys? =
+
+Survey import and export is a [Pro](https://surveyx.co/pricing/) feature, as JSON, for moving a survey between sites. The free version can import a ready-made survey from the template library.
 
 = Where can I get support? =
 
-Visit the [WordPress support forum](https://wordpress.org/support/plugin/surveyx-builder/) or check our [documentation](https://surveyx.co/docs/). [Pro users](https://surveyx.co/pricing/) get dedicated support through our [ticket system](https://ruby.ticksy.com/).
+Use the [WordPress support forum](https://wordpress.org/support/plugin/surveyx-builder/) or the [documentation](https://surveyx.co/docs/). [Pro users](https://surveyx.co/pricing/) get priority support through our [ticket system](https://ruby.ticksy.com/).
 
 = How can I become a contributor? =
 
 Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to contribute.
 
 == Changelog ==
+
+= 2.0.0 =
+* Added: Every active survey gets its own shareable page at /survey/{id}/{slug}/, with no shortcode needed
+* Added: Survey pages carry Open Graph and Twitter tags, so a shared link shows a title, description and preview image
+* Added: The survey page URL base is configurable in Settings
+* Added: Standalone survey pages can be turned off site-wide
+* Changed: The survey link and the embed shortcode now sit together in the Activate Survey card
+* Improved: The survey payload is cached, so a repeat visit does not rebuild it
+* Improved: Survey data loads in split queries, so the settings and content are read once rather than once per answer row
+* Improved: Added covering database indexes for the response and analytics queries, and dropped four that benchmarking proved dead
+* Improved: The survey-page options are autoloaded, removing three database reads from every request
+* Improved: View counts moved onto the survey row, so the analytics cache is no longer kept alive just to hold them
+* Improved: The public survey loads its less-common question renderers on demand, keeping the first load smaller
+* Fixed: Activating a survey from the Editor tab erased that survey's settings
+* Fixed: Going Next then Back cleared a typed text answer
+* Fixed: One Enter press acted on every survey embedded on the same page
+* Fixed: Respondents were stranded when their current question had been deleted
+* Fixed: Polls set to "view votes in results" did not show the live results to respondents
+* Fixed: A rare false "unsaved changes" prompt while the editor was still loading
+* Fixed: A vote could be counted twice when two submissions arrived at the same moment
+* Fixed: Drop-off read 0 on sites with WP-Cron disabled
+* Fixed: Yes/No answer order varied between page loads
+* Fixed: A new question could land on a position already in use
+* Fixed: Deleting a survey left its revision history and orphaned analytics rows behind
+* Fixed: The export screen listed only the first 100 surveys
+* Fixed: A search matching nothing showed the "no surveys yet" message
+* Fixed: Saving a survey wrote PHP deprecation notices on PHP 8.1 and newer
+* Fixed: A partial settings save could overwrite the rest of the settings
+* Fixed: The 404 illustration rendered larger than the viewport
+* Fixed: Corrected a "Queston Type" typo shown above every question
+* Fixed: Logged-out visitors saw an empty space on a login-required survey
+* Security: Repeated requests naming surveys that do not exist are now rate-limited
 
 = 1.7.0 =
 * Added: Survey image size option (Settings > Appearance) to reduce image weight and speed up page load, with automatic fallback to the full size image when needed
@@ -195,3 +268,8 @@ Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to c
 
 = 1.0.0 =
 * Initial release
+
+== Upgrade Notice ==
+
+= 2.0.0 =
+Every active survey now gets its own shareable page at /survey/{id}/{slug}/, with social preview tags, plus a faster public survey and more than twenty fixes.

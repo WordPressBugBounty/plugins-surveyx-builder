@@ -18,7 +18,7 @@ function surveyx_handle_revote_on_update( $data ) {
 		return;
 	}
 
-	// Get survey settings (per-survey, not global)
+	// Per-survey settings, not the global option.
 	$survey = SurveyX_Admin_Db::get_survey_by_id( $survey_id );
 
 	if ( ! $survey ) {
@@ -41,10 +41,9 @@ function surveyx_handle_revote_on_update( $data ) {
 		return;
 	}
 
-	// A structural change is a deletion, an addition (a new/temp id in the payload), or a
-	// net count change. A pure text edit (same items, same count) must NOT reset. Count
-	// alone misses a swap (delete 1 + add 1 keeps the count equal), so also honor the
-	// explicit delete lists and detect any temp id among the new items.
+	// A structural change is a deletion, an addition (a temp id in the payload), or a net
+	// count change. A pure text edit (same items, same count) must NOT reset. Count alone
+	// misses a swap (delete 1 + add 1 keeps the count equal), hence the explicit lists.
 	$has_deletion = ! empty( $removed_questions ) || ! empty( $removed_answers );
 
 	$has_addition = false;

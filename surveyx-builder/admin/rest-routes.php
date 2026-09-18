@@ -6,11 +6,21 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 	class SurveyX_Admin_Routes {
 
+		/**
+		 * Singleton instance.
+		 *
+		 * @var SurveyX_Admin_Routes
+		 */
 		private static $instance;
 
 		public const ROUTE_NAMESPACE = SURVEYX_REST_NAMESPACE;
 		protected $api;
 
+		/**
+		 * Get the singleton instance.
+		 *
+		 * @return SurveyX_Admin_Routes
+		 */
 		public static function get_instance() {
 			if ( null === self::$instance ) {
 				self::$instance = new self();
@@ -19,6 +29,9 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 			return self::$instance;
 		}
 
+		/**
+		 * Constructor - registers the class's hooks.
+		 */
 		public function __construct() {
 			self::$instance = $this;
 			$this->api      = SurveyX_Admin_API::get_instance();
@@ -27,8 +40,9 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 		}
 
 		/**
-		 * Permission callback to check if user can manage options.
-		 * Verifies user has 'manage_options' capability (administrator role).
+		 * Permission callback for every route in this file: 'manage_options'
+		 * (administrator). None of these endpoints is public — no route here may
+		 * swap this for __return_true.
 		 *
 		 * @since 1.0.0
 		 *
@@ -36,7 +50,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 		 * @return true|WP_Error True if the request has permission, WP_Error otherwise.
 		 */
 		public function check_manage_permission( WP_REST_Request $request ) {
-			// Check user capability
 			if ( ! current_user_can( 'manage_options' ) ) {
 				return new WP_Error(
 					'rest_forbidden',
@@ -49,19 +62,12 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 		}
 
 		/**
-		 * Register all admin REST API routes.
-		 *
-		 * SECURITY NOTE: All admin endpoints use check_manage_permission() which verifies
-		 * user has 'manage_options' capability (WordPress administrator role).
-		 * These endpoints are NOT public - they require authenticated admin access.
+		 * Registers the admin REST routes. Every one is admin-only: check_manage_permission()
+		 * is the permission_callback throughout.
 		 *
 		 * @return void
 		 */
 		public function register_rest_routes() {
-			/**
-			 * Get survey data for editor.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/data',
@@ -72,10 +78,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get lightweight survey header info for dashboard.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Lightweight header fields for the dashboard list, not the full editor payload.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/header-info',
@@ -86,10 +89,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get full survey data for settings page.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Returns the FULL survey row, not just its settings blob.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/settings',
@@ -100,10 +100,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get paginated list of surveys for admin dashboard.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/list',
@@ -114,10 +110,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Create a new survey.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/create',
@@ -130,10 +122,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Delete a survey permanently.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Permanent — there is no trash step.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/delete',
@@ -146,10 +135,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Quick update survey status (publish/unpublish).
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Toggles survey status (publish / unpublish) only.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/live',
@@ -162,10 +148,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Update survey content and settings.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/update',
@@ -176,10 +158,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Fetch survey templates from remote server (surveyx.co).
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Outbound HTTP to surveyx.co.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/template/all',
@@ -192,10 +171,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Start template import process with progress tracking.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Starts a tracked import; /admin/import/progress polls it.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/import/start',
@@ -208,10 +184,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get import progress status by import_id.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/import/progress',
@@ -224,10 +196,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get plugin global settings.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Plugin-wide settings, not the per-survey settings above.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/settings/get',
@@ -240,10 +209,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Fetch documentation from remote server for help page.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/docs/all',
@@ -256,10 +221,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Fetch notifications from remote server for admin notification popup.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/notifications/all',
@@ -272,10 +233,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Update plugin global settings.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/settings/update',
@@ -288,10 +245,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get survey analytics overview data (insights + summary tabs).
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Feeds the Insights and Summary tabs.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/analytics/overview',
@@ -304,10 +258,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Force refresh/recalculate survey analytics summary.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Forces recalculation, bypassing the cached summary.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/analytics/refresh',
@@ -320,10 +271,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get text responses for Response Summary.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/analytics/text-responses',
@@ -336,10 +283,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Autosave survey data to revisions table.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Writes to the revisions table, not to the survey row.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/autosave',
@@ -352,10 +296,7 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Check if newer autosave revision exists.
-			 * Admin-only: Requires manage_options capability.
-			 */
+			// Reports whether a revision is newer than the loaded survey.
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/autosave-status',
@@ -368,10 +309,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Restore survey from a specific revision.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/restore-revision',
@@ -384,10 +321,6 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 				]
 			);
 
-			/**
-			 * Get revision history list for a survey.
-			 * Admin-only: Requires manage_options capability.
-			 */
 			register_rest_route(
 				self::ROUTE_NAMESPACE,
 				'/admin/survey/revisions',
@@ -403,5 +336,4 @@ if ( ! class_exists( 'SurveyX_Admin_Routes', false ) ) {
 	}
 }
 
-/** load */
 SurveyX_Admin_Routes::get_instance();

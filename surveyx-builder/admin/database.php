@@ -22,16 +22,13 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 
 			$table = $wpdb->prefix . 'surveyx_surveys';
 
-			// Validate sort column
 			$allowed_sort_columns = [ 'id', 'title', 'survey_type', 'status', 'created_at', 'updated_at' ];
 			if ( ! in_array( $sort_by, $allowed_sort_columns, true ) ) {
 				$sort_by = 'created_at';
 			}
 
-			// Validate sort order
 			$sort_order = 'ASC' === strtoupper( $sort_order ) ? 'ASC' : 'DESC';
 
-			// Build WHERE clause for search
 			$where      = '';
 			$where_args = [];
 			if ( ! empty( $search ) ) {
@@ -40,7 +37,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				$where_args = [ $like, intval( $search ) ];
 			}
 
-			// Get total count
 			$count_sql = "SELECT COUNT(*) FROM {$table} {$where}";
 			if ( ! empty( $where_args ) ) {
                 // phpcs:ignore WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB -- $count_sql is safely built with whitelisted column names
@@ -49,10 +45,8 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB -- Table/columns are hardcoded, safe
 			$total = (int) $wpdb->get_var( $count_sql );
 
-			// Calculate offset
 			$offset = ( $page - 1 ) * $per_page;
 
-			// Get paginated results - only select fields needed for list display
 			$sql = "SELECT id, title, survey_type, status, cover, s_mode, created_at, updated_at
 			        FROM {$table} {$where}
 			        ORDER BY {$sort_by} {$sort_order}
@@ -66,6 +60,22 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				$rows = [];
 			}
 
+			/*
+			 * The dashboard greys a row and blocks the click on `s_mode === 'pro'`, and the
+			 * editor endpoints refuse on SurveyX_Db::survey_needs_pro(). An unstamped row
+			 * ('' in this NOT NULL varchar) would make those two disagree: the row looks
+			 * editable, opens, and comes back 403. Resolving the stamp here means the list
+			 * carries the same answer the server will give, so no new field is needed and
+			 * the client keeps its existing comparison.
+			 *
+			 * Costs one extra read per UNSTAMPED row on the page only — the migration step
+			 * [stamp_survey_modes] leaves none.
+			 */
+			foreach ( $rows as &$row ) {
+				$row['s_mode'] = SurveyX_Db::resolve_survey_mode( $row['id'], (string) $row['s_mode'] );
+			}
+			unset( $row );
+
 			return [
 				'items'    => $rows,
 				'total'    => $total,
@@ -77,13 +87,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		/**
 		 * Retrieves a survey by its ID.
 		 *
-		 * This function fetches a survey record from the database based on the given survey ID.
-		 *
 		 * @param int $survey_id The ID of the survey to retrieve.
 		 *
-		 * @return array|null An array of survey objects if found, or null if no survey exists with the given ID.
-		 * @global wpdb $wpdb The WordPress database object.
-		 *
+		 * @return array|null Survey row, or null if no survey has that ID.
 		 */
 		public static function get_survey_by_id( $survey_id ) {
 			global $wpdb;
@@ -101,41 +107,16 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
-		 * Returns a survey's mode ('basic' | 'pro'), or null if it doesn't exist.
-		 *
-		 * @param int $survey_id The survey ID.
-		 * @return string|null
-		 */
-		public static function get_survey_mode( $survey_id ) {
-			global $wpdb;
-
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT s_mode FROM {$wpdb->prefix}surveyx_surveys WHERE id = %d",
-					$survey_id
-				)
-			);
-		}
-
-		/**
 		 * Creates a new survey entry in the database.
 		 *
-		 * This method inserts a new row into the `surveyx_surveys` table
-		 * with the given title and survey type. By default, the survey type is "vote".
-		 *
-		 *
-		 * @param string $title The title of the survey.
+		 * @param string $title       The title of the survey.
 		 * @param string $survey_type Optional. The type of survey to create. Default 'vote'.
 		 *
 		 * @return int|false The ID of the newly created survey on success, or false on failure.
-		 * @global wpdb $wpdb WordPress database abstraction object.
-		 *
 		 */
 		public static function create_survey( $title, $survey_type = 'vote' ) {
 			global $wpdb;
 
-			// Default settings for new surveys
 			$default_settings = [
 				'skip_submit_button'       => true,
 				'show_header_branding'     => false,
@@ -145,7 +126,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				'allow_revote_on_update'   => false,
 			];
 
-			// Navigation bar settings only for survey, trivia, personality types
 			if ( in_array( $survey_type, [ 'survey', 'trivia', 'personality' ], true ) ) {
 				$default_settings['allow_return']   = true;
 				$default_settings['navigation_bar'] = 'both';
@@ -159,7 +139,15 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					'survey_type' => $survey_type,
 					'author_id'   => get_current_user_id(),
 					'status'      => 'inactive',
-					'content'     => wp_json_encode( [ 'title' => $title ] ),
+					'content'     => wp_json_encode(
+						[
+							'title'        => $title,
+							// 'default' records the intent to follow the site-wide Default Cover
+							// Layout; creation is the only moment we know the row is new. Surveys
+							// predating the feature carry no cover_layout key and resolve to 'stacked'.
+							'cover_layout' => 'default',
+						]
+					),
 					'settings'    => wp_json_encode( $default_settings ),
 					's_mode'      => 'basic',
 					'created_at'  => surveyx_get_utc_now(),
@@ -175,12 +163,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$new_survey_id = $wpdb->insert_id;
 
 			/**
-			 * Fires after a survey is created or its settings / content / questions /
-			 * answers are saved. Cache layers (e.g. the static /init payload) subscribe
-			 * to invalidate their entry so nothing stale survives the write; other
-			 * subsystems (summary / analytics caches) can hook in later. Replaces the
-			 * previous direct SurveyX_Db::flush_survey_init_cache() calls. Here it also
-			 * covers a fresh id reusing a just-deleted survey's slot.
+			 * Fires after a survey is created, or its settings / content / questions /
+			 * answers are saved. Cache layers (the static /init payload, and the summary /
+			 * analytics caches) subscribe to invalidate their entry so nothing stale
+			 * survives the write. Here it also covers a fresh id reusing a just-deleted
+			 * survey's slot.
 			 *
 			 * @param int $survey_id ID of the saved survey.
 			 */
@@ -191,8 +178,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 
 		/**
 		 * Deletes a survey from the database.
-		 *
-		 * This function removes a survey record from the `surveyx_surveys` table based on the given survey ID.
 		 *
 		 * @param int $survey_id The ID of the survey to be deleted.
 		 *
@@ -216,15 +201,34 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
-		 * Deletes all questions associated with a specific survey.
+		 * Deletes every autosave/snapshot revision belonging to a survey.
 		 *
-		 * This method deletes all entries from the `surveyx_questions` table that are
-		 * linked to the given survey ID.
+		 * Revisions are the one child table the delete-survey path does not clear on its
+		 * own. Each row holds a FULL survey snapshot in a LONGTEXT column, so skipping
+		 * this costs hundreds of KB per install and leaves question and answer wording
+		 * readable long after the owner deleted the survey. Call it only after the parent
+		 * survey row is gone, so nothing can reach these rows any more.
+		 *
+		 * @param int $survey_id The survey ID.
+		 * @return int|false Rows deleted, or false on failure.
+		 */
+		public static function delete_revisions_by_survey_id( $survey_id ) {
+			global $wpdb;
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return $wpdb->delete(
+				$wpdb->prefix . 'surveyx_revisions',
+				[ 'survey_id' => $survey_id ],
+				[ '%d' ]
+			);
+		}
+
+		/**
+		 * Deletes all questions associated with a specific survey.
 		 *
 		 * @param int $survey_id The ID of the survey whose questions should be deleted.
 		 *
 		 * @return int|false The number of rows deleted on success, false on failure.
-		 * @global wpdb $wpdb WordPress database abstraction object.
 		 */
 		public static function delete_questions_by_survey_id( $survey_id ) {
 			global $wpdb;
@@ -240,14 +244,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		/**
 		 * Deletes all answers associated with a specific survey.
 		 *
-		 * This method first retrieves all question IDs related to the given survey ID,
-		 * then deletes the corresponding answers from the surveyx_answers table.
-		 *
 		 * @param int $survey_id The ID of the survey whose answers should be deleted.
 		 *
 		 * @return bool True on success, false if any delete operation fails.
-		 * @global wpdb $wpdb WordPress database abstraction object.
-		 *
 		 */
 		public static function delete_answers_by_survey_id( $survey_id ) {
 			global $wpdb;
@@ -263,7 +262,14 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		/**
 		 * Deletes all response records associated with a specific survey ID.
 		 *
-		 * Removes rows from surveyx_responses, surveyx_sessions, and surveyx_summary tables.
+		 * Removes rows from surveyx_responses, surveyx_sessions and surveyx_summary,
+		 * and zeroes the view accumulator on surveyx_surveys.
+		 *
+		 * The accumulator must be zeroed explicitly: since [views_to_surveys] moved it
+		 * out of the summary row, deleting that row no longer zeroes views, and a survey
+		 * whose data has been cleared would show its old view count beside zeros for
+		 * everything else. On the delete-survey path the survey row is already gone, so
+		 * the UPDATE matches nothing — the correct outcome there.
 		 *
 		 * @param int $survey_id The survey ID.
 		 * @return int|false The number of rows deleted on success, or false on failure.
@@ -271,7 +277,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		public static function delete_responses_by_survey_id( $survey_id ) {
 			global $wpdb;
 
-			// Delete from responses table
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->delete(
 				$wpdb->prefix . 'surveyx_responses',
@@ -279,7 +284,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d' ]
 			);
 
-			// Delete from sessions table (complete history for this survey)
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->delete(
 				$wpdb->prefix . 'surveyx_sessions',
@@ -287,7 +291,22 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d' ]
 			);
 
-			// Delete from summary table
+			// Zero the view accumulator in whichever table currently owns it. Before
+			// the migration that is the summary row deleted just below.
+			if ( function_exists( 'surveyx_views_on_surveys_table' ) && surveyx_views_on_surveys_table() ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->update(
+					$wpdb->prefix . 'surveyx_surveys',
+					[ 'total_views' => 0 ],
+					[ 'id' => $survey_id ],
+					[ '%d' ],
+					[ '%d' ]
+				);
+			}
+
+			// Every figure the analytics cache holds was measured from the rows just deleted.
+			SurveyX_Db::flush_analytics_cache( $survey_id );
+
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			return $wpdb->delete(
 				$wpdb->prefix . 'surveyx_summary',
@@ -297,10 +316,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
-		 * Delete responses associated with the given question IDs in chunks for large datasets.
+		 * Delete responses associated with the given question IDs.
 		 *
-		 * This method deletes responses in batches of a configurable size to avoid
-		 * large queries that could cause performance issues or exceed MySQL limits.
+		 * Chunked so the IN () list cannot outgrow MySQL's query limits.
 		 *
 		 * @param array $question_ids An array of question IDs whose responses should be deleted.
 		 * @param int $chunk_size Optional. Number of IDs to delete per query. Default is 500.
@@ -311,14 +329,12 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			global $wpdb;
 
 			if ( empty( $question_ids ) ) {
-				return true; // Nothing to delete
+				return true;
 			}
 
-			// Process IDs in chunks
 			foreach ( array_chunk( $question_ids, $chunk_size ) as $chunk ) {
 				$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
 
-				// Delete from responses table
 				$sql = $wpdb->prepare(
 					"DELETE FROM {$wpdb->prefix}surveyx_responses WHERE question_id IN ($placeholders)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 					...$chunk
@@ -336,11 +352,9 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
-		 * Delete responses associated with the given answer IDs in chunks.
+		 * Delete responses associated with the given answer IDs.
 		 *
-		 * This method deletes responses in batches to prevent performance issues
-		 * when dealing with a large number of answer IDs. It processes the IDs
-		 * in chunks to avoid large queries that could exceed MySQL limits.
+		 * Chunked so the IN () list cannot outgrow MySQL's query limits.
 		 *
 		 * @param int[] $answer_ids Array of answer IDs to delete responses for.
 		 * @param int $chunk_size Optional. Number of IDs to delete per query. Default is 500.
@@ -351,14 +365,12 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			global $wpdb;
 
 			if ( empty( $answer_ids ) ) {
-				return true; // Nothing to delete
+				return true;
 			}
 
-			// Process IDs in chunks
 			foreach ( array_chunk( $answer_ids, $chunk_size ) as $chunk ) {
 				$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
 
-				// Delete from responses table
 				$sql = $wpdb->prepare(
 					"DELETE FROM {$wpdb->prefix}surveyx_responses WHERE answer_id IN ($placeholders)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 					...$chunk
@@ -376,13 +388,15 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		}
 
 		/**
-		 * Retrieves survey editor data including survey details, questions, answers, and votes.
+		 * Retrieves survey editor data: survey content, questions and answers.
 		 *
-		 * This function fetches:
-		 * - The survey's content (decoded from JSON).
-		 * - All questions belonging to the survey.
-		 * - All answers related to those questions.
-		 * - All vote records related to the survey.
+		 * Free reads only surveys the free engine may edit; a Pro survey returns []. The
+		 * endpoints ahead of this already refuse those through block_if_pro_survey(), so
+		 * the test here is the second lock on the same door rather than the only one.
+		 *
+		 * `s_mode` is reported RESOLVED, never raw: an unstamped row would otherwise reach
+		 * the dashboard as '' and be greyed or not on a different rule than the one that
+		 * let it through here.
 		 *
 		 * @param int $survey_id The ID of the survey to retrieve.
 		 *
@@ -391,15 +405,13 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		public static function get_survey_editor_data( $survey_id ) {
 			global $wpdb;
 
-			// GET SURVEY DATA
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$survey_result = $wpdb->get_row(
 				$wpdb->prepare(
 					"SELECT content, s_mode
                     FROM {$wpdb->prefix}surveyx_surveys
-                    WHERE id = %d AND `s_mode` = %s",
-					$survey_id,
-					'basic'
+                    WHERE id = %d",
+					$survey_id
 				)
 			);
 
@@ -407,9 +419,13 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				return [];
 			}
 
+			if ( SurveyX_Db::survey_needs_pro( $survey_id, (string) $survey_result->s_mode ) ) {
+				return [];
+			}
+
 			$survey           = json_decode( $survey_result->content, true ) ?: [];
 			$survey['id']     = $survey_id;
-			$survey['s_mode'] = $survey_result->s_mode;
+			$survey['s_mode'] = SurveyX_Db::resolve_survey_mode( $survey_id, (string) $survey_result->s_mode );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$questions = $wpdb->get_results(
@@ -417,12 +433,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					"SELECT id, sorder, content
 			         FROM {$wpdb->prefix}surveyx_questions
 			         WHERE survey_id = %d
-			         ORDER BY sorder ASC, id ASC",
+			         ORDER BY sorder ASC",
 					$survey_id
 				)
 			);
 
-			// Decode JSON and map to expected format for Vue
 			foreach ( $questions as &$question ) {
 				$question->content = json_decode( $question->content, true );
 			}
@@ -434,12 +449,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					"SELECT id, title, question_id, sorder, content
 			         FROM {$wpdb->prefix}surveyx_answers
 			         WHERE survey_id = %d
-			         ORDER BY sorder ASC, id ASC",
+			         ORDER BY sorder ASC",
 					$survey_id
 				)
 			);
 
-			// Decode JSON and map to expected format for Vue
 			foreach ( $answers as &$answer ) {
 				$answer->content = json_decode( $answer->content, true );
 			}
@@ -455,38 +469,52 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		/**
 		 * Quickly updates a survey record in the database.
 		 *
-		 * Updates the title, survey_type, status, settings, and updated_at fields
-		 * of the survey identified by the given survey ID.
+		 * Writes ONLY the columns the caller actually supplied — `survey_type`, `status`
+		 * and `settings` are each optional — plus `updated_at`, which always moves. A
+		 * caller that owns one field (the activation toggle owns `status`) must be able
+		 * to persist it without restating, and so without overwriting, the rest of the row.
 		 *
-		 * @param int $survey_id The ID of the survey to update.
+		 * @param int   $survey_id The ID of the survey to update.
+		 * @param array $data      Any of 'survey_type', 'status', 'settings'.
 		 *
 		 * @return int|false Number of rows updated on success, false on failure.
 		 */
 		public static function quick_update_survey( $survey_id, $data ) {
 			global $wpdb;
 
+			$update_data = [];
+			$formats     = [];
+
+			foreach ( [ 'survey_type', 'status' ] as $column ) {
+				if ( array_key_exists( $column, $data ) ) {
+					$update_data[ $column ] = $data[ $column ];
+					$formats[]              = '%s';
+				}
+			}
+
+			if ( array_key_exists( 'settings', $data ) ) {
+				$update_data['settings'] = wp_json_encode( $data['settings'] );
+				$formats[]               = '%s';
+			}
+
+			if ( empty( $update_data ) ) {
+				return 0;
+			}
+
+			$update_data['updated_at'] = surveyx_get_utc_now();
+			$formats[]                 = '%s';
+
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$result = $wpdb->update(
 				$wpdb->prefix . 'surveyx_surveys',
-				[
-					'survey_type' => $data['survey_type'],
-					'status'      => $data['status'],
-					'settings'    => wp_json_encode( $data['settings'] ),
-					'updated_at'  => surveyx_get_utc_now(),
-				],
+				$update_data,
 				[ 'id' => $survey_id ],
-				[
-					'%s', // survey_type
-					'%s', // status
-					'%s', // settings (json string)
-					'%s', // updated_at (datetime string)
-				],
-				[ '%d' ] // id as integer
+				$formats,
+				[ '%d' ]
 			);
 
-			// Status / settings (theme, branding, s_mode, etc.) affect the static
-			// /init payload — fire the saved action so caches invalidate. Also covers
-			// publish/unpublish.
+			// Status / settings (theme, branding, s_mode) and publish state all feed the
+			// static /init payload.
 			do_action( 'surveyx_survey_saved', $survey_id );
 
 			return $result;
@@ -494,7 +522,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 
 		/**
 		 * Update a survey record in the database.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id   The ID of the survey to update.
 		 * @param array $survey_data The survey data to save.
@@ -504,10 +531,8 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 		public static function update_survey_base( int $survey_id, array $survey_data = [] ) {
 			global $wpdb;
 
-			// Encode survey data as JSON for storage
 			$survey_json = wp_json_encode( $survey_data );
 
-			// Update content and timestamps directly
 			$update_data = [
 				'content'    => $survey_json,
 				'cover'      => $survey_data['image_url'] ?? '',
@@ -524,7 +549,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d' ]
 			);
 
-			// Content changed — fire the saved action so caches invalidate.
 			do_action( 'surveyx_survey_saved', $survey_id );
 
 			return $result;
@@ -532,37 +556,29 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 
 		/**
 		 * Save or update questions and answers for a survey.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id Survey ID.
 		 * @param array $questions Array of questions data.
 		 * @param array $answers   Array of answers data.
 		 *
-		 * @return array|false ID mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
-		 *                     on success, or false when a DB write failed (transaction rolled back).
+		 * @return array ID mapping ['questions' => [temp_id => real_id], 'answers' => [temp_id => real_id]]
 		 */
 		public static function update_questions_and_answers_base( int $survey_id, array $questions = [], array $answers = [] ) {
 			global $wpdb;
 
-			// Start transaction
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->query( 'START TRANSACTION' );
 
 			// Question types that require answers (must match JS constant)
 			$question_types_requiring_answers = [ 'check_box', 'select', 'check_box_image', 'yes_no' ];
 
-			// ID mapping for temp IDs to real IDs
 			$id_mapping = [
 				'questions' => [],
 				'answers'   => [],
 			];
 
 			try {
-				// Bucket answers by their ORIGINAL question_id once (O(A)) so each
-				// question resolves only its own answers. This is the single key space
-				// used for the temp-id -> real-id reconciliation: a question is inserted/
-				// updated to its real id, then its answers (bucketed under the question's
-				// original id) are written against that real id in one pass.
+				// Bucket answers by question_id once so each question does not rescan the full array.
 				$answers_by_qid = [];
 				foreach ( $answers as $a ) {
 					if ( empty( $a['question_id'] ) ) {
@@ -571,119 +587,93 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 					$answers_by_qid[ (string) $a['question_id'] ][] = $a;
 				}
 
+				// A question with no title — or one of the answer-bearing types with no
+				// non-empty answer — is silently dropped from the save.
 				foreach ( $questions as $q ) {
-					// Skip if the question has no ID
 					if ( empty( $q['id'] ) ) {
 						continue;
 					}
 
-					// Skip if question has no title
 					$question_title = $q['content']['title'] ?? '';
 					if ( empty( trim( $question_title ) ) ) {
 						continue;
 					}
 
-					// This question's answers, keyed by its original (possibly temp) id.
-					$question_answer_rows = $answers_by_qid[ (string) $q['id'] ] ?? [];
-
-					// Get question type
 					$question_type = $q['content']['type'] ?? '';
 
-					// Check if question requires answers
 					$requires_answers = in_array( $question_type, $question_types_requiring_answers, true );
 
-					// If question requires answers, check if it has valid answers
 					if ( $requires_answers ) {
 						$question_answers = array_filter(
-							$question_answer_rows,
+							$answers_by_qid[ (string) $q['id'] ] ?? [],
 							function ( $a ) {
-								// Check if answer has non-empty title
 								$title = $a['content']['title'] ?? '';
 								return ! empty( trim( $title ) );
 							}
 						);
 
-						// Skip this question if it has no valid answers
 						if ( empty( $question_answers ) ) {
 							continue;
 						}
 					}
 
-					// Resolve the real question id (insert or update), throwing on a
-					// write failure so the transaction rolls back instead of COMMITting
-					// a partial save.
 					if ( SurveyX_Admin_Helpers::is_temp_id( $q['id'] ) ) {
-						$real_qid = self::add_new_question( $survey_id, $q );
-						if ( false === $real_qid ) {
-							throw new Exception( 'Failed to insert question.' );
-						}
+						$real_qid                            = self::add_new_question( $survey_id, $q );
 						$id_mapping['questions'][ $q['id'] ] = $real_qid;
 					} else {
 						$real_qid = self::update_existing_question( $survey_id, $q );
-						if ( false === $real_qid ) {
-							throw new Exception( 'Failed to update question.' );
-						}
 					}
 
-					// Write this question's answers against the resolved real id. No
-					// second ownership filter is needed: the bucket already holds exactly
-					// this question's answers.
-					$answer_mappings       = self::update_answers_base( $survey_id, $real_qid, $question_answer_rows );
+					$question_answer_rows = $answers_by_qid[ (string) $q['id'] ] ?? [];
+					if ( (string) $real_qid !== (string) $q['id'] && isset( $answers_by_qid[ (string) $real_qid ] ) ) {
+						$question_answer_rows = array_merge( $question_answer_rows, $answers_by_qid[ (string) $real_qid ] );
+					}
+					$answer_mappings       = self::update_answers_base( $survey_id, $real_qid, $q, $question_answer_rows );
 					$id_mapping['answers'] = array_merge( $id_mapping['answers'], $answer_mappings );
 				}
 
-				// Commit transaction
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->query( 'COMMIT' );
 
-				// Questions/answers changed — fire the saved action so caches invalidate.
 				do_action( 'surveyx_survey_saved', $survey_id );
 
 				return $id_mapping;
 			} catch ( Exception $exception ) {
-				// A write failed mid-save: roll back so we never persist a partial
-				// (question saved, answers missing) state, and signal failure to the
-				// caller so it can surface a non-200 instead of a false "success".
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->query( 'ROLLBACK' );
 
-				return false;
+				return $id_mapping;
 			}
 		}
 
 		/**
 		 * Update or add answers for a specific survey question.
-		 * Saves content to database. Throws on a DB write failure so the caller's
-		 * transaction can roll back.
 		 *
 		 * @param int   $survey_id The ID of the survey.
 		 * @param int   $real_qid  The real ID of the question (after insert/update).
-		 * @param array $answers   This question's answers (already scoped to it).
+		 * @param array $q         The question data array. Expected keys include 'id'.
+		 * @param array $answers   Array of answers data.
 		 *
 		 * @return array Answer ID mappings [temp_id => real_id]
-		 * @throws Exception When a DB write fails.
 		 */
-		public static function update_answers_base( int $survey_id, int $real_qid, array $answers ) {
+		public static function update_answers_base( int $survey_id, int $real_qid, array $q, array $answers ) {
 			$answer_mappings = [];
 
 			foreach ( $answers as $a ) {
-				// Skip if the answer does not belong to any question
 				if ( empty( $a['question_id'] ) ) {
 					continue;
 				}
 
-				if ( empty( $a['id'] ) || SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
-					$real_aid = self::add_new_answer( $survey_id, $real_qid, $a );
-					if ( false === $real_aid ) {
-						throw new Exception( 'Failed to insert answer.' );
-					}
-					if ( ! empty( $a['id'] ) && SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
-						$answer_mappings[ $a['id'] ] = $real_aid;
-					}
-				} else {
-					$updated = self::update_existing_answer( $survey_id, $real_qid, $a );
-					if ( false === $updated ) {
-						throw new Exception( 'Failed to update answer.' );
+				$answer_qid = $a['question_id'];
+
+				if ( $answer_qid === $q['id'] || intval( $answer_qid ) === $real_qid ) {
+					if ( empty( $a['id'] ) || SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
+						$real_aid = self::add_new_answer( $survey_id, $real_qid, $a );
+						if ( ! empty( $a['id'] ) && SurveyX_Admin_Helpers::is_temp_id( $a['id'] ) ) {
+							$answer_mappings[ $a['id'] ] = $real_aid;
+						}
+					} else {
+						self::update_existing_answer( $survey_id, $real_qid, $a );
 					}
 				}
 			}
@@ -693,7 +683,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 
 		/**
 		 * Add a new survey question.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id The ID of the survey.
 		 * @param array $q         Question data array with 'content' and 'sorder'.
@@ -707,7 +696,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder  = intval( $q['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-			$inserted = $wpdb->insert(
+			$wpdb->insert(
 				$wpdb->prefix . 'surveyx_questions',
 				[
 					'survey_id' => $survey_id,
@@ -718,17 +707,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d', '%s', '%d', '%s' ]
 			);
 
-			// Signal the write failure so the enclosing transaction can roll back.
-			if ( false === $inserted ) {
-				return false;
-			}
-
 			return $wpdb->insert_id;
 		}
 
 		/**
 		 * Update an existing survey question.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id The ID of the survey.
 		 * @param array $q         Question data array with 'id', 'content', and 'sorder'.
@@ -743,7 +726,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder      = intval( $q['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$updated = $wpdb->update(
+			$wpdb->update(
 				$wpdb->prefix . 'surveyx_questions',
 				[
 					'title'   => $q['content']['title'] ?? '',
@@ -758,17 +741,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d', '%d' ]
 			);
 
-			// false = DB error (0 = no-op change), so only false is a failure.
-			if ( false === $updated ) {
-				return false;
-			}
-
 			return $question_id;
 		}
 
 		/**
 		 * Add a new answer to a survey question.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id   The ID of the survey.
 		 * @param int   $question_id The ID of the question.
@@ -783,7 +760,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder  = intval( $a['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-			$inserted = $wpdb->insert(
+			$wpdb->insert(
 				$wpdb->prefix . 'surveyx_answers',
 				[
 					'survey_id'   => $survey_id,
@@ -795,17 +772,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d', '%d', '%s', '%d', '%s' ]
 			);
 
-			// Signal the write failure so the enclosing transaction can roll back.
-			if ( false === $inserted ) {
-				return false;
-			}
-
 			return $wpdb->insert_id;
 		}
 
 		/**
 		 * Update an existing answer for a survey question.
-		 * Saves content to database.
 		 *
 		 * @param int   $survey_id   The ID of the survey.
 		 * @param int   $question_id The ID of the question.
@@ -821,7 +792,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			$sorder    = intval( $a['sorder'] ?? 1 );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$updated = $wpdb->update(
+			$wpdb->update(
 				$wpdb->prefix . 'surveyx_answers',
 				[
 					'question_id' => $question_id,
@@ -837,17 +808,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d', '%d' ]
 			);
 
-			// false = DB error (0 = no-op change), so only false is a failure.
-			if ( false === $updated ) {
-				return false;
-			}
-
 			return $answer_id;
 		}
 
 		/**
 		 * Delete survey questions permanently.
-		 * No more trash logic - questions are deleted immediately.
 		 *
 		 * @param int   $survey_id           The ID of the survey.
 		 * @param array $remove_question_ids An array of question IDs to delete.
@@ -861,7 +826,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				return;
 			}
 
-			// Delete questions
 			foreach ( $remove_question_ids as $rid ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete(
@@ -874,13 +838,11 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				);
 			}
 
-			// Delete associated responses
 			self::delete_responses_by_question_ids( $remove_question_ids );
 		}
 
 		/**
 		 * Delete survey answers permanently.
-		 * No more trash logic - answers are deleted immediately.
 		 *
 		 * @param int   $survey_id         The survey ID.
 		 * @param array $remove_answer_ids Array of answer IDs to delete.
@@ -894,7 +856,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				return;
 			}
 
-			// Delete answers
 			foreach ( $remove_answer_ids as $rid ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete(
@@ -907,7 +868,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				);
 			}
 
-			// Delete associated responses
 			self::delete_responses_by_answer_ids( $remove_answer_ids );
 		}
 
@@ -933,7 +893,7 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			];
 			$format_values = [ '%s', '%s' ];
 
-			// Sync status column from settings data if present
+			// status lives in the settings JSON and in its own column; keep them in sync.
 			if ( ! empty( $survey_data['settings']['status'] ) ) {
 				$allowed_statuses = [ 'active', 'inactive' ];
 				$status           = sanitize_text_field( $survey_data['settings']['status'] );
@@ -952,7 +912,6 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				[ '%d' ]
 			);
 
-			// Imported content/settings changed — fire the saved action so caches invalidate.
 			do_action( 'surveyx_survey_saved', $survey_id );
 
 			return false !== $result ? $survey_id : false;

@@ -12,28 +12,249 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 	class SurveyX_Analytics_Db {
 
 		/**
-		 * Get survey overview data for Insights + Summary tabs.
+		 * How long a measured analytics snapshot is served before it is measured again.
+		 *
+		 * Short on purpose: every miss re-measures from surveyx_sessions and surveyx_responses,
+		 * so the window only absorbs an admin's hand-made burst (switching tabs, back, reload).
+		 * Staleness remains - the Responses tab pages live from the database, so a cached
+		 * "Answered: 120" can still sit beside a list of 123.
+		 */
+		const CACHE_TTL = 15 * MINUTE_IN_SECONDS;
+
+		/**
+		 * Transient key holding the analytics snapshot for one survey.
+		 *
+		 * Deleted by name, never by prefix sweep: SurveyX_Db::flush_analytics_cache() is the ONE
+		 * invalidation path and it deletes this exact key, so keep it in step with any rename.
+		 * Its callers are the paths that change what the snapshot counted - the stale-session
+		 * drop-off sweep, the per-survey session reset and the admin response deletes, plus, in
+		 * Pro only, session completion and the off-path response prune.
+		 *
+		 * No save path flushes it, in either edition: `surveyx_survey_saved` has exactly one
+		 * listener and it flushes the static /init cache, not this snapshot, so editing a survey
+		 * leaves the snapshot standing until CACHE_TTL expires.
 		 *
 		 * @param int $survey_id Survey ID.
+		 * @return string Transient key.
+		 */
+		public static function snapshot_key( int $survey_id ) {
+			return 'surveyx_summary_snap_' . $survey_id;
+		}
+
+		/**
+		 * Get survey overview data for Insights + Summary tabs.
+		 *
+		 * Every number in the payload comes from ONE snapshot, and figures read against each
+		 * other come from one statement (get_participation_counts() measures seen and answered
+		 * together), so a rate can never mix a cached numerator with a live denominator.
+		 * Question and answer text is still read per request, so the snapshot never freezes a
+		 * title.
+		 *
+		 * @param int  $survey_id Survey ID.
+		 * @param bool $force     Re-measure and rebuild the snapshot, ignoring the cache.
 		 * @return array|false Overview data or false on failure.
 		 */
-		public static function get_survey_overview( int $survey_id ) {
+		public static function get_survey_overview( int $survey_id, bool $force = false ) {
 			if ( empty( $survey_id ) ) {
 				return false;
 			}
 
-			$summary         = self::get_summary_full( $survey_id );
-			$questions       = self::get_questions( $survey_id );
-			$answers         = self::get_answers_for_summary( $survey_id, $summary );
-			$scale_responses = self::get_scale_responses( $survey_id );
+			return self::hydrate_overview( $survey_id, self::get_snapshot( $survey_id, $force ) );
+		}
 
-			// Parse JSON fields from summary
-			$seen_count_by_question = [];
-			if ( ! empty( $summary->question_seen_counts ) ) {
-				$seen_count_by_question = json_decode( $summary->question_seen_counts, true ) ?: [];
+		/**
+		 * Get the current analytics snapshot for a survey, building one if needed.
+		 *
+		 * The single entry point every analytics screen reads its numbers through, so two tabs
+		 * opened seconds apart cannot disagree.
+		 *
+		 * The cached value's age is re-checked against its own stamp rather than trusted to the
+		 * transient: get_transient() reports a hit whenever the value row outlives its
+		 * _transient_timeout_ row, which several persistent object caches produce under eviction,
+		 * and a snapshot served past that point would never expire. Same guard as
+		 * SurveyX_Db::get_answer_total_vote().
+		 *
+		 * @param int  $survey_id Survey ID.
+		 * @param bool $force     Re-measure and rebuild, ignoring the cache.
+		 * @return array Snapshot of aggregates.
+		 */
+		public static function get_snapshot( int $survey_id, bool $force = false ) {
+			if ( ! $force ) {
+				$snapshot = get_transient( self::snapshot_key( $survey_id ) );
+
+				// is_array() is also the pre-2.0 upgrade guard: this key used to hold an integer
+				// recount timestamp. Anything that is not a snapshot is simply re-measured.
+				if ( is_array( $snapshot ) && self::snapshot_is_fresh( $snapshot ) ) {
+					return $snapshot;
+				}
 			}
 
-			// Ensure all questions have a count
+			$snapshot = self::build_snapshot( $survey_id );
+			set_transient( self::snapshot_key( $survey_id ), $snapshot, self::CACHE_TTL );
+
+			return $snapshot;
+		}
+
+		/**
+		 * Whether a cached snapshot is still inside CACHE_TTL by its own stamp.
+		 *
+		 * measure_summary() stamps summary.last_updated in the same pass that measures the
+		 * figures, so the age is already in the payload and needs no extra storage. A snapshot
+		 * carrying no stamp (an earlier 2.0 build) or one stamped in the future (clock skew, a
+		 * restored database) is re-measured once.
+		 *
+		 * @param array $snapshot Snapshot read back from the transient.
+		 * @return bool True when the snapshot was measured within the last CACHE_TTL.
+		 */
+		private static function snapshot_is_fresh( array $snapshot ) {
+			$stamp = $snapshot['summary']['last_updated'] ?? '';
+
+			if ( ! is_string( $stamp ) || '' === $stamp ) {
+				return false;
+			}
+
+			// surveyx_get_utc_now() writes 'Y-m-d H:i:s' in UTC; naming the zone here
+			// makes the read independent of the process default timezone.
+			$measured_at = strtotime( $stamp . ' UTC' );
+
+			if ( ! $measured_at ) {
+				return false;
+			}
+
+			$age = time() - $measured_at;
+
+			return $age >= 0 && $age < self::CACHE_TTL;
+		}
+
+		/**
+		 * Measure every analytics aggregate for one survey in a single pass.
+		 *
+		 * Measured from surveyx_sessions and surveyx_responses, not read out of surveyx_summary:
+		 * that table is a cache of these same aggregates, so reading it showed whatever the last
+		 * recount happened to store. Stores pure numbers - no titles, no translated strings - so
+		 * nothing structural can go stale here.
+		 *
+		 * "One pass" is per aggregate, not across them: these queries run in sequence and a write
+		 * can land between two of them, so any two figures a screen divides or compares must be
+		 * measured by ONE query - see get_participation_counts().
+		 *
+		 * @param int $survey_id Survey ID.
+		 * @return array Snapshot of aggregates.
+		 */
+		protected static function build_snapshot( int $survey_id ) {
+			$text_response_counts = self::get_text_response_counts( $survey_id );
+
+			// The virtual "Other" answer is the answer_id = 0 bucket that
+			// get_text_response_counts() has already counted - same predicate, same
+			// GROUP BY. Reading it from there retires a second identical query.
+			$other_votes_by_question = [];
+			foreach ( $text_response_counts as $qid => $by_type ) {
+				if ( ! empty( $by_type['other'] ) ) {
+					$other_votes_by_question[ (string) $qid ] = (int) $by_type['other'];
+				}
+			}
+
+			// seen and answered are the two halves of one ratio, so they come from ONE statement:
+			// assembling them from two reads once rendered a response rate above 100%.
+			$participation = self::get_participation_counts( $survey_id );
+
+			$answer_votes   = SurveyX_Db::get_answer_votes( $survey_id );
+			$response_count = SurveyX_Db::get_response_count_by_question( $survey_id );
+
+			$snapshot = [
+				'summary'                    => self::measure_summary( $survey_id, $participation['seen'], $answer_votes, $response_count ),
+				'seen_count_by_question'     => $participation['seen'],
+				'response_count_by_question' => $response_count,
+				'answer_votes'               => $answer_votes,
+				'other_votes_by_question'    => $other_votes_by_question,
+				'text_response_counts'       => $text_response_counts,
+				'answered_count_by_question' => $participation['answered'],
+				'dropoff_by_question'        => self::get_dropoff_by_question( $survey_id ),
+				'scale_responses'            => self::get_scale_responses( $survey_id ),
+			];
+
+			/**
+			 * Filter the analytics snapshot. Pro attaches the aggregates the base
+			 * measurement does not cover. Anything added here is measured in the same
+			 * pass as the summary figures - and must be numbers only, never labels.
+			 *
+			 * @param array $snapshot  Snapshot of aggregates.
+			 * @param int   $survey_id Survey ID.
+			 */
+			return apply_filters( 'surveyx_survey_overview_snapshot', $snapshot, $survey_id );
+		}
+
+		/**
+		 * Measure the survey-level figures the Insights tab renders.
+		 *
+		 * Reproduces, deliberately and exactly, the definitions surveyx_summary stored, by calling
+		 * the same SurveyX_Db methods the recount used rather than rewriting their SQL: getting
+		 * one subtly wrong changes what a number MEANS after an upgrade.
+		 *
+		 * - total_starts is SUM(status != 'viewed' AND != 'expired'), not a session count.
+		 * - total_dropoffs counts abandoned sessions, not starts - completions, and counts
+		 *   SurveyX_Session_Manager::dropped_off_sql() rather than the stored status alone, so it
+		 *   does not read 0 on an install whose cron never runs. Identical once the sweep has run.
+		 * - average_time_seconds is AVG(time_spent) over COMPLETED sessions, truncated, and - the
+		 *   one definition deliberately NOT preserved - bounded to plausible sittings (see
+		 *   SurveyX_Db::MAX_RESPONSE_TIME_SECONDS), NULL when nothing qualifies. The stored column
+		 *   averaged an unbounded wall-clock span, so a single resumed abandonment reported a
+		 *   survey's response time in days.
+		 * - most_common_dropoff_question_id has no tiebreak, so ties may resolve to a different
+		 *   question id than a previous measurement chose. Inherent to the definition.
+		 *
+		 * `question_seen_counts`, `answer_votes_json` and `response_count_by_question` stay JSON
+		 * strings because that is the shape the payload has always had; the zeros are stripped
+		 * from the seen counts because the stored query grouped rows that HAVE a viewed_at, so a
+		 * question with none was absent, not zero.
+		 *
+		 * @param int   $survey_id      Survey ID.
+		 * @param array $seen_counts    {question_id => distinct sessions that saw it}.
+		 * @param array $answer_votes   {answer_id => votes}.
+		 * @param array $response_count {question_id => answered response rows}.
+		 * @return array Summary figures, keyed exactly as the payload has always been.
+		 */
+		private static function measure_summary( int $survey_id, array $seen_counts, array $answer_votes, array $response_count ) {
+			$stats = SurveyX_Db::get_session_stats( $survey_id );
+
+			$completion_rate = $stats['starts'] > 0 ? ( $stats['completions'] / $stats['starts'] ) * 100 : 0;
+			$dropoff_rate    = $stats['starts'] > 0 ? ( $stats['dropoffs'] / $stats['starts'] ) * 100 : 0;
+
+			$most_common_dropoff = SurveyX_Db::get_most_common_dropoff( $survey_id );
+
+			return [
+				'total_views'                     => $stats['views'],
+				'total_starts'                    => $stats['starts'],
+				'total_completions'               => $stats['completions'],
+				'total_dropoffs'                  => $stats['dropoffs'],
+				// Two places because the figure lived in a DECIMAL(5,2) column and everything
+				// downstream was written against that precision.
+				'completion_rate'                 => round( $completion_rate, 2 ),
+				'dropoff_rate'                    => round( $dropoff_rate, 2 ),
+				'average_time_seconds'            => $stats['avg_time'],
+				'most_common_dropoff_question_id' => null === $most_common_dropoff ? null : (int) $most_common_dropoff,
+				'question_seen_counts'            => wp_json_encode( array_filter( $seen_counts ) ),
+				'answer_votes_json'               => wp_json_encode( $answer_votes ),
+				'response_count_by_question'      => wp_json_encode( $response_count ),
+				// The moment this snapshot was measured; nothing recounts any more.
+				'last_updated'                    => surveyx_get_utc_now(),
+			];
+		}
+
+		/**
+		 * Build the overview payload from a snapshot plus current question/answer text.
+		 *
+		 * @param int   $survey_id Survey ID.
+		 * @param array $snapshot  Snapshot produced by build_snapshot().
+		 * @return array Overview data.
+		 */
+		protected static function hydrate_overview( int $survey_id, array $snapshot ) {
+			$questions = self::get_questions( $survey_id );
+
+			$seen_count_by_question = isset( $snapshot['seen_count_by_question'] ) && is_array( $snapshot['seen_count_by_question'] )
+				? $snapshot['seen_count_by_question']
+				: [];
+
 			foreach ( $questions as $q ) {
 				$qid = (string) $q->id;
 				if ( ! isset( $seen_count_by_question[ $qid ] ) ) {
@@ -41,34 +262,17 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				}
 			}
 
-			$dropoff_by_question = self::get_dropoff_by_question( $survey_id );
-
-			// Parse response count by question from summary
-			$response_count_by_question = [];
-			if ( ! empty( $summary->response_count_by_question ) ) {
-				$response_count_by_question = json_decode( $summary->response_count_by_question, true ) ?: [];
-			}
-
-			// Send last_updated as UTC timestamp for JS to calculate cache expiry
-			// JS handles timezone conversion and display consistently
-
-			// Get text response counts (counts only, no content - for fast initial load)
-			$text_response_counts = self::get_text_response_counts( $survey_id );
-
-			// Distinct respondents who answered each question — for a participation-based
-			// response rate that stays <= 100% (summing multi-select votes can exceed it).
-			$answered_count_by_question = self::get_answered_respondent_counts( $survey_id );
-
+			// summary.last_updated ships as a UTC timestamp; the client converts and displays it.
 			$data = [
 				'questions'                  => $questions,
-				'answers'                    => $answers,
-				'summary'                    => $summary,
+				'answers'                    => self::build_answers( $survey_id, $snapshot ),
+				'summary'                    => (object) ( $snapshot['summary'] ?? [] ),
 				'seen_count_by_question'     => $seen_count_by_question,
-				'dropoff_by_question'        => $dropoff_by_question,
-				'response_count_by_question' => $response_count_by_question,
-				'answered_count_by_question' => $answered_count_by_question,
-				'scale_responses'            => $scale_responses,
-				'text_response_counts'       => $text_response_counts,
+				'dropoff_by_question'        => $snapshot['dropoff_by_question'] ?? [],
+				'response_count_by_question' => $snapshot['response_count_by_question'] ?? [],
+				'answered_count_by_question' => $snapshot['answered_count_by_question'] ?? [],
+				'scale_responses'            => $snapshot['scale_responses'] ?? [],
+				'text_response_counts'       => $snapshot['text_response_counts'] ?? [],
 			];
 
 			/**
@@ -76,12 +280,13 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 			 *
 			 * @param array $data      Overview data.
 			 * @param int   $survey_id Survey ID.
+			 * @param array $snapshot  Snapshot the payload was built from.
 			 */
-			return apply_filters( 'surveyx_survey_overview_data', $data, $survey_id );
+			return apply_filters( 'surveyx_survey_overview_data', $data, $survey_id, $snapshot );
 		}
 
 		/**
-		 * Refresh survey summary and return updated overview.
+		 * Re-measure a survey and return the updated overview.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return array|false Updated overview data or false on failure.
@@ -91,12 +296,9 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return false;
 			}
 
-			// Call cron function to recalculate
-			if ( function_exists( 'surveyx_update_summary' ) ) {
-				surveyx_update_summary( $survey_id );
-			}
-
-			return self::get_survey_overview( $survey_id );
+			// Forcing re-measures AND re-arms the cache in one step; skipping either leaves the
+			// next request to measure the whole survey again.
+			return self::get_survey_overview( $survey_id, true );
 		}
 
 		/**
@@ -121,7 +323,6 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return [];
 			}
 
-			// Only return needed fields for analytics
 			foreach ( $questions as $question ) {
 				$full_content      = json_decode( $question->content, true );
 				$question->content = [
@@ -136,56 +337,18 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 		}
 
 		/**
-		 * Get full summary with JSON fields for a survey.
+		 * Build the Summary tab answer list: current answer text joined to snapshot votes.
 		 *
-		 * @param int $survey_id Survey ID.
-		 * @return object Summary object with all fields.
-		 */
-		private static function get_summary_full( int $survey_id ) {
-			global $wpdb;
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$summary = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT total_views, total_starts, total_completions, total_dropoffs,
-						completion_rate, dropoff_rate, average_time_seconds,
-						most_common_dropoff_question_id, question_seen_counts, answer_votes_json,
-						response_count_by_question, last_updated
-					FROM {$wpdb->prefix}surveyx_summary
-					WHERE survey_id = %d",
-					$survey_id
-				)
-			);
-
-			if ( empty( $summary ) ) {
-				return (object) [
-					'total_views'                     => 0,
-					'total_starts'                    => 0,
-					'total_completions'               => 0,
-					'total_dropoffs'                  => 0,
-					'completion_rate'                 => 0,
-					'dropoff_rate'                    => 0,
-					'average_time_seconds'            => 0,
-					'most_common_dropoff_question_id' => null,
-					'question_seen_counts'            => '{}',
-					'answer_votes_json'               => '{}',
-					'response_count_by_question'      => '{}',
-					'last_updated'                    => null,
-				];
-			}
-
-			return $summary;
-		}
-
-		/**
-		 * Get answers for Summary tab using votes from summary JSON.
-		 * Also includes virtual "Other" answer counts for questions with show_other_option.
+		 * The votes come from the snapshot (so they agree with the seen counts they are
+		 * shown against); the titles and images are read now (so an edited answer shows
+		 * immediately). The virtual "Other" answer is built here rather than cached
+		 * because its label is translated and the snapshot must stay locale-free.
 		 *
-		 * @param int    $survey_id Survey ID.
-		 * @param object $summary   Summary object with answer_votes_json.
-		 * @return array Answers array with vote counts from summary.
+		 * @param int   $survey_id Survey ID.
+		 * @param array $snapshot  Snapshot produced by build_snapshot().
+		 * @return array Answers array with vote counts from the snapshot.
 		 */
-		private static function get_answers_for_summary( int $survey_id, $summary ) {
+		private static function build_answers( int $survey_id, array $snapshot ) {
 			global $wpdb;
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -202,11 +365,9 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				$answers = [];
 			}
 
-			// Parse votes from summary JSON
-			$votes_map = [];
-			if ( ! empty( $summary->answer_votes_json ) ) {
-				$votes_map = json_decode( $summary->answer_votes_json, true ) ?: [];
-			}
+			$votes_map = ( isset( $snapshot['answer_votes'] ) && is_array( $snapshot['answer_votes'] ) )
+				? $snapshot['answer_votes']
+				: [];
 
 			foreach ( $answers as $answer ) {
 				$full_content        = json_decode( $answer->content, true );
@@ -217,29 +378,25 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				$answer->total_votes = (int) ( $votes_map[ (string) $answer->id ] ?? 0 );
 			}
 
-			// Get "Other" votes count (answer_id = 0) grouped by question
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$other_votes = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT question_id, COUNT(*) as vote_count
-					FROM {$wpdb->prefix}surveyx_responses
-					WHERE survey_id = %d AND answer_id = 0 AND response_status = 'answered'
-					GROUP BY question_id",
-					$survey_id
-				)
-			);
+			// Virtual "Other" answer (answer_id = 0) per question, from the snapshot.
+			$other_votes = ( isset( $snapshot['other_votes_by_question'] ) && is_array( $snapshot['other_votes_by_question'] ) )
+				? $snapshot['other_votes_by_question']
+				: [];
 
-			// Add virtual "Other" answer for each question with Other votes
-			foreach ( $other_votes as $row ) {
+			foreach ( $other_votes as $question_id => $vote_count ) {
+				if ( $vote_count <= 0 ) {
+					continue;
+				}
+
 				$answers[] = (object) [
 					'id'          => 0,
-					'question_id' => $row->question_id,
+					'question_id' => (int) $question_id,
 					'content'     => [
 						'title'           => esc_html__( 'Other', 'surveyx-builder' ),
 						'image_url'       => '',
 						'is_other_option' => true,
 					],
-					'total_votes' => (int) $row->vote_count,
+					'total_votes' => (int) $vote_count,
 				];
 			}
 
@@ -247,44 +404,64 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 		}
 
 		/**
-		 * Get drop-off count per question.
-		 * Base implementation returns empty array. Extended via filter.
+		 * Count, per question, the DISTINCT respondents who SAW it and who ANSWERED it - the
+		 * denominator and numerator of the response rate, in one statement.
 		 *
-		 * @param int $_survey_id Survey ID (used by extended implementation).
-		 * @return array Drop-off count by question ID.
-		 */
-		protected static function get_dropoff_by_question( int $_survey_id ) {
-			return [];
-		}
-
-		/**
-		 * Count DISTINCT respondents who answered each question (not total votes).
-		 * Powers a participation-based response rate that never exceeds 100%,
-		 * unlike summing multi-select answer votes.
+		 * One statement is one instant: a /progress write landed before this read and is in both
+		 * counts, or after it and is in neither, never in one only. Counting distinct respondents
+		 * rather than summing answer votes is what stops a multi-select or matrix question
+		 * counting one respondent several times.
+		 *
+		 * It does NOT guarantee answered <= seen: the two predicates are independent columns, not
+		 * nested sets. Rows this plugin writes always carry a viewed_at
+		 * (SurveyX_Db::create_responses() defaults it to now), but surveyx_fix_viewed_at_datetime()
+		 * nulls unparseable legacy values without exempting response_status = 'answered', so an
+		 * upgraded install can hold answered rows that count as answered and not as seen. The
+		 * rendered ratio is clamped for exactly that case.
 		 *
 		 * @param int $survey_id Survey ID.
-		 * @return array question_id => distinct answered-respondent count.
+		 * @return array { seen: {question_id => count}, answered: {question_id => count} }
 		 */
-		protected static function get_answered_respondent_counts( int $survey_id ) {
+		protected static function get_participation_counts( int $survey_id ) {
 			global $wpdb;
 
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$results = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT question_id, COUNT(DISTINCT session_id) as count
+					"SELECT question_id,
+                        COUNT(DISTINCT CASE WHEN viewed_at IS NOT NULL THEN session_id END) as seen_count,
+                        COUNT(DISTINCT CASE WHEN response_status = 'answered' THEN session_id END) as answered_count
                     FROM {$wpdb->prefix}surveyx_responses
-                    WHERE survey_id = %d AND response_status = 'answered'
+                    WHERE survey_id = %d
                     GROUP BY question_id",
 					$survey_id
 				)
 			);
 
-			$counts = [];
+			$counts = [
+				'seen'     => [],
+				'answered' => [],
+			];
+
 			foreach ( $results as $row ) {
-				$counts[ (string) $row->question_id ] = (int) $row->count;
+				$counts['seen'][ (string) $row->question_id ]     = (int) $row->seen_count;
+				$counts['answered'][ (string) $row->question_id ] = (int) $row->answered_count;
 			}
 
 			return $counts;
+		}
+
+		/**
+		 * Get drop-off count per question. Base returns an empty array; Pro measures it.
+		 *
+		 * Must stay declared in Free: build_snapshot() calls it unconditionally, and deleting it
+		 * once made every Free analytics request fatal on an undefined method.
+		 *
+		 * @param int $_survey_id Survey ID (used by the Pro implementation).
+		 * @return array Drop-off count by question ID.
+		 */
+		protected static function get_dropoff_by_question( int $_survey_id ) {
+			return [];
 		}
 
 		/**
@@ -312,19 +489,16 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return [];
 			}
 
-			$type_map = SurveyX_Response_Types::text_response_type_map();
+			$type_map = [
+				-2 => 'text_input',
+				0  => 'other',
+			];
+			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
 
-			$answer_ids = array_map( 'intval', array_keys( $type_map ) );
-			if ( empty( $answer_ids ) ) {
-				return [];
-			}
-
-			// $placeholders is a run of %d specifiers, one per (int-cast) answer id, so
-			// the IN() list is bound through prepare() rather than interpolated raw.
+			$answer_ids   = array_keys( $type_map );
 			$placeholders = implode( ',', array_fill( 0, count( $answer_ids ), '%d' ) );
 
-			// IN() placeholders are bound via prepare(); table is a trusted $wpdb->prefix identifier.
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$results = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT question_id, answer_id, COUNT(*) as count
@@ -336,15 +510,12 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 					array_merge( [ $survey_id ], $answer_ids )
 				)
 			);
-			// phpcs:enable
 
-			// Transform to { question_id => { type => count } }
 			$counts = [];
 			foreach ( $results as $row ) {
 				$qid  = (string) $row->question_id;
 				$type = $type_map[ (int) $row->answer_id ] ?? null;
 
-				// Skip unknown types (only return mapped types)
 				if ( null === $type ) {
 					continue;
 				}
@@ -382,9 +553,12 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return [];
 			}
 
-			$type_map = SurveyX_Response_Types::text_response_type_map();
+			$type_map = [
+				-2 => 'text_input',
+				0  => 'other',
+			];
+			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
 
-			// Find answer_id for the requested type
 			$answer_id = array_search( $answer_type, $type_map, true );
 
 			if ( false === $answer_id ) {
@@ -428,9 +602,12 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				return 0;
 			}
 
-			$type_map = SurveyX_Response_Types::text_response_type_map();
+			$type_map = [
+				-2 => 'text_input',
+				0  => 'other',
+			];
+			$type_map = apply_filters( 'surveyx_text_response_type_map', $type_map );
 
-			// Find answer_id for the requested type
 			$answer_id = array_search( $answer_type, $type_map, true );
 
 			if ( false === $answer_id ) {

@@ -8,6 +8,301 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 	class SurveyX_Db {
 
 		/**
+		 * Longest session span that still counts as a response time, in seconds.
+		 *
+		 * `surveyx_sessions.time_spent` is not a stopwatch. complete_session() sets it from
+		 * get_session_time_spent(), which is MIN(viewed_at) → MAX(answered_at) across the
+		 * session's answered rows — wall clock, with no bound. A respondent who leaves the tab
+		 * open is marked dropped_off after SESSION_TIMEOUT_MINUTES, but restart_pending lets them
+		 * come back, and the span is then recomputed across the whole absence with nothing in the
+		 * row recording that it happened.
+		 *
+		 * Averaging those spans produced a global "Avg Response Time" of 4h 15m on a real
+		 * 455-session install; TWO sessions (one spanning 99 days, one 61) were responsible, and
+		 * removing them put the same figure at 55 seconds — four tenths of one percent of the data
+		 * moving the headline by 279x, and doing the same to a single survey's column. So the
+		 * aggregates below measure only sessions that could plausibly BE one sitting. On that data
+		 * the distribution holds nothing at all between 23 minutes (the longest genuine session)
+		 * and 61 days, so the exact figure is not load-bearing and a generous one costs nothing.
+		 * It is a DISPLAY bound only: no stored value is altered or discarded.
+		 *
+		 * time_spent = 0 is excluded for the opposite reason — it is what get_session_time_spent()
+		 * returns when it could not measure at all (no answered row carrying both timestamps), so
+		 * counting it as a zero-second response drags the mean the other way. 18% of completed
+		 * sessions in that dataset are zeros.
+		 *
+		 * A survey with no completed session inside these bounds has no measurable response time,
+		 * so the aggregates report NULL rather than 0 and the admin can show an em dash instead of
+		 * a confident wrong number.
+		 */
+		const MAX_RESPONSE_TIME_SECONDS = 14400;
+
+		/** Survey mode meaning "needs Pro to edit and to render". */
+		const MODE_PRO = 'pro';
+
+		/** Survey mode meaning "the basic engine can edit and render this survey". */
+		const MODE_BASIC = 'basic';
+
+		/**
+		 * Question types the basic renderer is able to display.
+		 *
+		 * Mirrors `baseQuestionTypes` in the basic edition's
+		 * resources/frontend/composables/question-type-loader.js. A type NOT listed marks the
+		 * survey MODE_PRO (see classify_questions()), so a type added later is Pro-only by
+		 * default rather than an empty question box. Add a type here only when the basic
+		 * renderer can actually display it.
+		 *
+		 * @var string[]
+		 */
+		const BASIC_RENDERABLE_QUESTION_TYPES = [
+			'check_box',
+			'multi_check_box',
+			'check_box_image',
+			'multi_check_box_image',
+			'select',
+			'text_input',
+			'yes_no',
+		];
+
+		/**
+		 * Resolved mode per survey id for this request, so classify_survey() runs once per
+		 * survey however many gates ask about it. Dropped by flush_survey_mode() on save.
+		 *
+		 * @var array<int,string>
+		 */
+		private static $mode_cache = [];
+
+		/**
+		 * THE basic/pro rule, applied to a set of questions.
+		 *
+		 * More than one question is MODE_PRO: the basic editor and renderer both hold exactly
+		 * one, so opening a multi-question survey there and saving it would discard the
+		 * rest. A single question is MODE_PRO too when its type is outside
+		 * BASIC_RENDERABLE_QUESTION_TYPES — the same rule expressed for types, since the
+		 * respondent would otherwise be shown an empty box. Everything else is MODE_BASIC.
+		 *
+		 * The rule runs in both directions: dropping the extra questions, or swapping the
+		 * only question back to a basic type, returns the survey to MODE_BASIC.
+		 *
+		 * @param array $questions Question records: arrays or objects carrying a `content`
+		 *                         member, itself either a decoded array or its raw JSON.
+		 *
+		 * @return string MODE_PRO or MODE_BASIC.
+		 */
+		public static function classify_questions( $questions ) {
+			if ( ! is_array( $questions ) ) {
+				return self::MODE_BASIC;
+			}
+
+			if ( count( $questions ) > 1 ) {
+				return self::MODE_PRO;
+			}
+
+			foreach ( $questions as $question ) {
+				if ( ! in_array( self::read_question_type( $question ), self::BASIC_RENDERABLE_QUESTION_TYPES, true ) ) {
+					return self::MODE_PRO;
+				}
+			}
+
+			return self::MODE_BASIC;
+		}
+
+		/**
+		 * Reads a question record's type out of whichever shape the caller holds.
+		 *
+		 * A save posts questions whose `content` is already decoded; a row read back from
+		 * surveyx_questions carries it as JSON. One reader covers both, so the rule above
+		 * never has to know which side called it.
+		 *
+		 * @param mixed $question Question record.
+		 *
+		 * @return string The type, or '' when the record carries none.
+		 */
+		private static function read_question_type( $question ) {
+			if ( is_object( $question ) ) {
+				$question = get_object_vars( $question );
+			}
+
+			$content = is_array( $question ) ? ( $question['content'] ?? null ) : null;
+
+			if ( is_string( $content ) ) {
+				$content = json_decode( $content, true );
+			}
+
+			return is_array( $content ) ? (string) ( $content['type'] ?? '' ) : '';
+		}
+
+		/**
+		 * Applies the rule to a survey by reading its stored questions.
+		 *
+		 * LIMIT 2 is what keeps this bounded: two rows already settle the count half of the
+		 * rule whatever they contain, so at most two question blobs are ever loaded, however
+		 * long the survey is.
+		 *
+		 * @param int $survey_id Survey ID.
+		 *
+		 * @return string MODE_PRO or MODE_BASIC.
+		 */
+		public static function classify_survey( $survey_id ) {
+			global $wpdb;
+
+			$survey_id = absint( $survey_id );
+
+			if ( empty( $survey_id ) ) {
+				return self::MODE_BASIC;
+			}
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT content FROM {$wpdb->prefix}surveyx_questions WHERE survey_id = %d LIMIT 2",
+					$survey_id
+				)
+			);
+
+			return self::classify_questions( (array) $rows );
+		}
+
+		/**
+		 * A survey's mode: its stamp when that stamp means something, the rule run now when
+		 * it does not.
+		 *
+		 * `s_mode` is a NOT NULL varchar, so any INSERT that omitted the column stored '' —
+		 * a survey that has never been CLASSIFIED, not one classified as basic. The gates
+		 * that used to read the column each guessed differently ('' counted as basic at
+		 * some, as not-basic at others), so one survey could be editable at one door,
+		 * refused at the next and a fatal error at a third. An unknown stamp is therefore
+		 * resolved by running classify_survey() rather than guessed, and the migration step
+		 * [stamp_survey_modes] writes the answer back so this stays a cold path.
+		 *
+		 * @param int         $survey_id Survey ID.
+		 * @param string|null $s_mode    The stored stamp when the caller already holds the
+		 *                               row, so no second read is needed. Null to read it here.
+		 *
+		 * @return string MODE_PRO or MODE_BASIC.
+		 */
+		public static function resolve_survey_mode( $survey_id, $s_mode = null ) {
+			if ( self::MODE_PRO === $s_mode || self::MODE_BASIC === $s_mode ) {
+				return $s_mode;
+			}
+
+			$survey_id = absint( $survey_id );
+
+			if ( empty( $survey_id ) ) {
+				return self::MODE_BASIC;
+			}
+
+			if ( isset( self::$mode_cache[ $survey_id ] ) ) {
+				return self::$mode_cache[ $survey_id ];
+			}
+
+			// The caller held no row, so the stamp still has to be read before deciding
+			// whether the rule needs running at all.
+			if ( null === $s_mode ) {
+				global $wpdb;
+
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$stored = (string) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT s_mode FROM {$wpdb->prefix}surveyx_surveys WHERE id = %d",
+						$survey_id
+					)
+				);
+
+				if ( self::MODE_PRO === $stored || self::MODE_BASIC === $stored ) {
+					self::$mode_cache[ $survey_id ] = $stored;
+
+					return $stored;
+				}
+			}
+
+			self::$mode_cache[ $survey_id ] = self::classify_survey( $survey_id );
+
+			return self::$mode_cache[ $survey_id ];
+		}
+
+		/**
+		 * THE reader predicate: is this survey Pro-only for the edition now running?
+		 *
+		 * Every gate asks this one question — the editor endpoints, the dashboard listing,
+		 * the [surveyx] shortcode, the standalone survey page and the public /init and
+		 * /progress permission check — so they cannot answer it differently for the same
+		 * survey, which is the whole point of the helper.
+		 *
+		 * With Pro active the answer is always false: Pro edits and renders every survey,
+		 * whatever its mode. That is why the copies of the shared files that carry this call
+		 * behave identically to before in Pro.
+		 *
+		 * @param int         $survey_id Survey ID.
+		 * @param string|null $s_mode    The stored stamp when the caller already holds the row.
+		 *
+		 * @return bool True when the running edition can neither edit nor render this survey.
+		 */
+		public static function survey_needs_pro( $survey_id, $s_mode = null ) {
+			if ( defined( 'SURVEYX_PRO_VERSION' ) ) {
+				return false;
+			}
+
+			return self::MODE_PRO === self::resolve_survey_mode( $survey_id, $s_mode );
+		}
+
+		/**
+		 * Drops a survey's resolved mode so a later gate in the same request re-reads it.
+		 *
+		 * Called from the save path, which is the only thing that can change the answer
+		 * while a request is running.
+		 *
+		 * @param int $survey_id Survey ID.
+		 *
+		 * @return void
+		 */
+		public static function flush_survey_mode( $survey_id ) {
+			unset( self::$mode_cache[ absint( $survey_id ) ] );
+		}
+
+		/**
+		 * THE writer: persists the mode so the gates read an answer instead of computing one.
+		 *
+		 * The rule itself lives in classify_questions(); this only stores what it returns.
+		 * Every path that creates a survey or rewrites its questions has to call this, or the
+		 * survey keeps the '' stamp create_survey() seeds - and an unstamped survey is one
+		 * every gate re-classifies on every request.
+		 *
+		 * @param int        $survey_id Survey ID.
+		 * @param array|null $questions The questions as the caller holds them, for a save that
+		 *                              has them in hand. Null reads the rows back instead,
+		 *                              which is what an import wants once they have landed.
+		 *
+		 * @return bool True when the stamp was written.
+		 */
+		public static function stamp_survey_mode( $survey_id, $questions = null ) {
+			global $wpdb;
+
+			$survey_id = absint( $survey_id );
+
+			if ( empty( $survey_id ) ) {
+				return false;
+			}
+
+			$s_mode = is_array( $questions )
+				? self::classify_questions( $questions )
+				: self::classify_survey( $survey_id );
+
+			// A gate may already have resolved (and memoised) this survey earlier in the
+			// request, from the questions as they were before this write.
+			self::flush_survey_mode( $survey_id );
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return false !== $wpdb->update(
+				$wpdb->prefix . 'surveyx_surveys',
+				[ 's_mode' => $s_mode ],
+				[ 'id' => $survey_id ],
+				[ '%s' ],
+				[ '%d' ]
+			);
+		}
+
+		/**
 		 * Checks if a survey exists in the database by its ID.
 		 *
 		 * @param int $survey_id The ID of the survey to check.
@@ -33,16 +328,20 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Gets the minimal survey row needed to render the shortcode in a single query.
+		 * Gets the survey row needed to render the shortcode in a single query.
 		 *
 		 * Consolidates the previous per-call queries (survey_exists, get_survey_mode,
-		 * get_survey_settings) into one row. Memoized per survey_id for the current
-		 * request so repeated shortcode/enqueue passes reuse the same result.
+		 * get_survey_settings) into one row, memoized per survey_id for the current request so
+		 * repeated shortcode/enqueue passes reuse the same result. `title` and `cover` are also
+		 * selected: the shortcode does not need them, but the standalone survey page controller
+		 * (SurveyX_Public_Page) builds the page title, canonical URL and social tags from them.
 		 *
 		 * @param int $survey_id Survey ID.
 		 *
-		 * @return object|null Row with `id`, `s_mode`, `status` and decoded `settings`
-		 *                     (array|null), or null if the survey does not exist.
+		 * @return object|null Row with `id`, `title`, `status`, `s_mode`, `cover`, decoded
+		 *                     `settings` (array|null) and decoded `content` (array|null), plus
+		 *                     `is_published` (bool: status active with non-empty content). Null
+		 *                     if the survey does not exist.
 		 */
 		public static function get_survey_render_row( $survey_id ) {
 			static $cache = [];
@@ -62,13 +361,16 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$row = $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT id, s_mode, settings, status FROM {$wpdb->prefix}surveyx_surveys WHERE id = %d LIMIT 1",
+					"SELECT id, title, settings, content, status, s_mode, cover FROM {$wpdb->prefix}surveyx_surveys WHERE id = %d LIMIT 1",
 					$survey_id
 				)
 			);
 
 			if ( ! is_null( $row ) ) {
-				$row->settings = json_decode( $row->settings, true );
+				// Computed before the decode below, which replaces the raw JSON string.
+				$row->is_published = ( 'active' === $row->status && '' !== (string) $row->content );
+				$row->settings     = json_decode( $row->settings, true );
+				$row->content      = json_decode( $row->content, true );
 			}
 
 			$cache[ $survey_id ] = $row;
@@ -161,11 +463,6 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				)
 			);
 
-			// Bulk 'expired' reset across many sessions. Kept as one UPDATE (rather than
-			// routed through SurveyX_Session_Manager::set_session_state(), which writes a
-			// single row) to avoid an N-query loop; the SET list is the canonical
-			// 'expired' column set and deliberately leaves restart_pending / last_activity_at
-			// untouched to preserve history.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$result = $wpdb->query(
 				$wpdb->prepare(
@@ -176,12 +473,14 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				)
 			);
 
-			// Invalidate the cached summary so analytics recompute without the just-reset
-			// (now 'expired') sessions instead of serving stale numbers for up to 6h.
-			delete_transient( 'surveyx_summary_' . $survey_id );
+			// Invalidate the cached analytics so they re-measure without the just-reset
+			// (now 'expired') sessions instead of serving stale numbers for the length
+			// of the cache.
+			self::flush_analytics_cache( $survey_id );
 
-			// Flush the respondent-facing vote cache so /vote-results doesn't serve the
-			// pre-reset counts for up to its 60s TTL.
+			// Flush the respondent-facing vote cache so /vote-results does not serve the pre-reset
+			// counts: VOTE_CACHE_TTL is 12 HOURS, so without this flush a respondent could be shown
+			// the discarded tally for the rest of the day.
 			self::flush_vote_cache( $survey_id );
 
 			return $result;
@@ -268,14 +567,13 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			// For text input, contact_info, or skipped (no answer_ids).
 			if ( empty( $answer_ids ) ) {
 				$response_content  = ! empty( $content ) ? wp_json_encode( $content ) : '';
-				$special_answer_id = SurveyX_Response_Types::special_answer_id( $question_type, $response_status );
+				$special_answer_id = self::get_special_answer_id( $question_type, $response_status );
 				$table             = $wpdb->prefix . 'surveyx_responses';
 
 				// INSERT IGNORE: the unique_response key (session_id, question_id,
 				// respondent_id, answer_id) makes a concurrent identical submit a harmless
 				// no-op instead of a duplicate row or a duplicate-key error.
-				// Table is a trusted $wpdb->prefix identifier; all values are bound via prepare().
-				// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$result = $wpdb->query(
 					$wpdb->prepare(
 						"INSERT IGNORE INTO {$table}
@@ -292,7 +590,6 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 						$now
 					)
 				);
-				// phpcs:enable
 
 				return false !== $result;
 			}
@@ -324,18 +621,48 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			}
 
 			$table = $wpdb->prefix . 'surveyx_responses';
-			// INSERT IGNORE: with the unique_response key, a concurrent identical submit
-			// (same session/question/respondent/answer_id) is skipped rather than
-			// duplicated or erroring — the guarantee the removed named lock provided.
+			// INSERT IGNORE, as above: with unique_response in place a concurrent identical submit is
+			// skipped rather than duplicated or erroring — the guarantee the removed named lock gave.
 			$sql = "INSERT IGNORE INTO {$table}
 				(session_id, survey_id, question_id, answer_id, respondent_id, response_content, response_status, viewed_at, answered_at)
 				VALUES " . implode( ', ', $placeholders );
 
-			// Table is a trusted $wpdb->prefix identifier; all values are bound via prepare().
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$result = $wpdb->query( $wpdb->prepare( $sql, $values ) );
 
 			return false !== $result;
+		}
+
+		/**
+		 * Gets special answer_id based on question type and response status.
+		 *
+		 * @param string $question_type   Question type.
+		 * @param string $response_status Response status.
+		 * @return int Special answer_id value.
+		 */
+		private static function get_special_answer_id( $question_type, $response_status ) {
+			if ( 'seen' === $response_status ) {
+				return -8;
+			}
+
+			if ( 'skipped_optional' === $response_status ) {
+				return -4;
+			}
+
+			switch ( $question_type ) {
+				case 'text_input':
+					return -2;
+				case 'contact_info':
+					return -3;
+				case 'opinion_scale':
+					return -5;
+				case 'rating':
+					return -6;
+				case 'date':
+					return -7;
+				default:
+					return -4;
+			}
 		}
 
 		/**
@@ -352,18 +679,16 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		public static function create_seen_response( $session_id, $survey_id, $question_id, $respondent_id, $status, $viewed_at ) {
 			global $wpdb;
 
-			$answer_id = ( 'seen' === $status ) ? SurveyX_Response_Types::SEEN : SurveyX_Response_Types::SKIPPED;
+			$answer_id = ( 'seen' === $status ) ? -8 : -4;
 			$table     = $wpdb->prefix . 'surveyx_responses';
 
-			// Idempotent insert: create the row only if no response yet exists for
-			// this (session, question, respondent). This lets the /question-seen
-			// handler drop its separate existence COUNT query, and guarantees a
-			// single 'seen' row even when the respondent navigates back to an
-			// already-viewed (or already-answered) question. INSERT IGNORE keeps a
-			// concurrent second seen-insert (which passes NOT EXISTS but would then
-			// hit the unique_response key) a harmless no-op instead of an error.
-			// Table is a trusted $wpdb->prefix identifier; all values are bound via prepare().
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, PluginCheck.Security.DirectDB
+			// Idempotent insert: create the row only if no response yet exists for this
+			// (session, question, respondent). This lets the /question-seen handler drop its
+			// separate existence COUNT query, and guarantees a single 'seen' row even when the
+			// respondent navigates back to an already-viewed (or already-answered) question.
+			// INSERT IGNORE keeps a concurrent second seen-insert (which passes NOT EXISTS but
+			// would then hit the unique_response key) a harmless no-op instead of an error.
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$result = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT IGNORE INTO {$table}
@@ -386,7 +711,6 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 					$respondent_id
 				)
 			);
-			// phpcs:enable
 
 			return false !== $result;
 		}
@@ -503,19 +827,35 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		 * Retrieves and decodes the JSON content of a specific question.
 		 *
 		 * @param int $question_id The ID of the question.
+		 * @param int $survey_id   Optional. When greater than 0 the question must also
+		 *                         belong to this survey, otherwise null is returned.
+		 *                         Public write paths always pass it, so a foreign or
+		 *                         nonexistent question_id is rejected by the caller
+		 *                         instead of falling through to type defaults.
 		 *
 		 * @return array|null The decoded question content as an associative array, or null if not found.
 		 */
-		public static function get_question_content( $question_id ) {
+		public static function get_question_content( $question_id, $survey_id = 0 ) {
 			global $wpdb;
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$result = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT content FROM {$wpdb->prefix}surveyx_questions WHERE id = %d",
-					$question_id
-				)
-			);
+			if ( $survey_id > 0 ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$result = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT content FROM {$wpdb->prefix}surveyx_questions WHERE id = %d AND survey_id = %d",
+						$question_id,
+						$survey_id
+					)
+				);
+			} else {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$result = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT content FROM {$wpdb->prefix}surveyx_questions WHERE id = %d",
+						$question_id
+					)
+				);
+			}
 
 			if ( is_null( $result ) ) {
 				return null;
@@ -525,7 +865,48 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
+		 * Returns which of the given answer IDs really belong to a question.
+		 *
+		 * Used by the public /progress path to drop answer IDs that were never
+		 * offered for the submitted question. Zero and negative IDs are stripped
+		 * before the query (0 is the virtual "Other" option and the negatives are
+		 * server-side sentinels — neither is a surveyx_answers row).
+		 *
+		 * @param int   $question_id The question the answers must belong to.
+		 * @param array $answer_ids  Answer IDs to check.
+		 *
+		 * @return array The subset of $answer_ids that exists on this question.
+		 */
+		public static function filter_answer_ids_by_question( $question_id, $answer_ids ) {
+			global $wpdb;
+
+			$answer_ids = array_values( array_unique( array_filter( array_map( 'absint', (array) $answer_ids ) ) ) );
+
+			if ( empty( $answer_ids ) ) {
+				return [];
+			}
+
+			$placeholders = implode( ', ', array_fill( 0, count( $answer_ids ), '%d' ) );
+
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$found = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT id FROM {$wpdb->prefix}surveyx_answers WHERE question_id = %d AND id IN ({$placeholders})",
+					array_merge( [ absint( $question_id ) ], $answer_ids )
+				)
+			);
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+			return array_map( 'absint', (array) $found );
+		}
+
+		/**
 		 * Retrieves a published survey by its ID with non-empty content.
+		 *
+		 * The basic/pro test is no longer a WHERE clause: SQL can only compare the stored
+		 * stamp, and an unstamped row has no stamp to compare. `s_mode` is selected instead
+		 * and handed to survey_needs_pro(), which resolves that case by running the rule.
+		 * It is dropped from the returned object again so callers see the shape they always did.
 		 *
 		 * @param int $survey_id The ID of the survey to retrieve.
 		 *
@@ -537,12 +918,11 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$result = $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT id, title, settings, content, survey_type
+					"SELECT id, title, settings, content, survey_type, s_mode
                     FROM {$wpdb->prefix}surveyx_surveys
                     WHERE id = %d
                     AND status = 'active'
-                    AND content != ''
-                    AND (s_mode IS NULL OR s_mode = 'basic')",
+                    AND content != ''",
 					$survey_id
 				)
 			);
@@ -551,32 +931,82 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				return false;
 			}
 
+			if ( self::survey_needs_pro( $result->id, (string) $result->s_mode ) ) {
+				return false;
+			}
+
+			unset( $result->s_mode );
+
 			$result->settings = json_decode( $result->settings, true );
 			$result->content  = json_decode( $result->content, true );
 
 			return $result;
 		}
 
-		// =====================================================================
-		// Static /init payload cache
-		// get_survey_init_data → get_survey_init_static → build_survey_init_static
-		// → get_init_static_cache_key → flush_survey_init_cache. The static part is
-		// shared by every visitor and cached across requests; it is invalidated on
-		// every survey edit via the surveyx_survey_saved / surveyx_survey_deleted
-		// actions (see the main plugin file's listener registration).
-		// =====================================================================
+		/**
+		 * Whether a survey may currently be answered by the public.
+		 *
+		 * Survey-level authorization gate shared by EVERY public REST route: it is
+		 * called once per request from SurveyX_API_Handler::check_public_permission()
+		 * (client/rest-routes.php), so /init, /progress, /question-seen,
+		 * /activate-session, /complete-session and /vote-results all reach the same
+		 * answer instead of each re-deciding. The respondent-scoped checks (session,
+		 * question ownership) stay in the individual handlers.
+		 *
+		 * Mirrors the publish rule of get_published_survey_by_id(): active status and
+		 * a survey the basic engine may render. Cost: one primary-key read of two small
+		 * columns, so the gate stays cheap on every public request. survey_needs_pro()
+		 * adds a query only for a survey whose stamp is missing, which the migration
+		 * step [stamp_survey_modes] leaves none of.
+		 *
+		 * @param int $survey_id The ID of the survey to check.
+		 *
+		 * @return bool True when the survey is active and renderable by the basic engine.
+		 */
+		public static function is_survey_open( $survey_id ) {
+			global $wpdb;
+
+			$survey_id = absint( $survey_id );
+
+			if ( empty( $survey_id ) ) {
+				return false;
+			}
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$row = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT status, s_mode FROM {$wpdb->prefix}surveyx_surveys
+                    WHERE id = %d
+                    LIMIT 1",
+					$survey_id
+				)
+			);
+
+			if ( is_null( $row ) || 'active' !== $row->status ) {
+				return false;
+			}
+
+			return ! self::survey_needs_pro( $survey_id, (string) $row->s_mode );
+		}
+
+		// Static /init payload cache: get_survey_init_data → get_survey_init_static →
+		// build_survey_init_static → get_init_static_cache_key → flush_survey_init_cache. The
+		// static part is shared by every visitor and cached across requests; it is invalidated on
+		// every survey edit via the surveyx_survey_saved / surveyx_survey_deleted actions (see the
+		// main plugin file's listener registration).
 
 		/**
 		 * Get complete published survey data in optimized queries.
 		 *
-		 * Free renders a single-question poll, so only the first question and its
+		 * The basic edition renders a single-question poll, so only the first question and its
 		 * answers are returned. The static part is served from the cross-request /init
 		 * cache; per-respondent responses are always fetched live.
 		 *
 		 * @param int    $survey_id     Survey ID.
 		 * @param string $respondent_id Optional respondent UUID for the caller's responses.
 		 * @return array|null ['survey','questions','answers','responses'] or null when the
-		 *                    survey is not renderable (missing, draft, empty, or non-basic s_mode).
+		 *                    survey is not renderable (missing, draft, empty, or Pro-only by
+		 *                    SurveyX_Db::survey_needs_pro()).
 		 */
 		public static function get_survey_init_data( $survey_id, $respondent_id = '' ) {
 			// Static part (survey + questions + answers), shared by every visitor and
@@ -655,7 +1085,7 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		 * settings/content blobs are fetched (and decoded) exactly once instead of
 		 * being duplicated across every answer row of the previous fan-out JOIN.
 		 *
-		 * Free: only the first question (single-question poll) and its answers.
+		 * Basic: only the first question (single-question poll) and its answers.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return array|null ['survey','questions','answers'] or null if the survey is not renderable.
@@ -663,19 +1093,23 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		private static function build_survey_init_static( $survey_id ) {
 			global $wpdb;
 
-			// 1) Survey row — settings/content blobs fetched once.
+			// 1) Survey row — settings/content blobs fetched once. The basic/pro test runs
+			// in PHP below, because an unstamped row has no stamp for SQL to compare.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$survey_row = $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT id, title, settings, content, survey_type
+					"SELECT id, title, settings, content, survey_type, s_mode
 					FROM {$wpdb->prefix}surveyx_surveys
-					WHERE id = %d AND status = 'active' AND content != ''
-						AND (s_mode IS NULL OR s_mode = 'basic')",
+					WHERE id = %d AND status = 'active' AND content != ''",
 					$survey_id
 				)
 			);
 
 			if ( ! $survey_row ) {
+				return null;
+			}
+
+			if ( self::survey_needs_pro( $survey_row->id, (string) $survey_row->s_mode ) ) {
 				return null;
 			}
 
@@ -690,14 +1124,14 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			$questions = [];
 			$answers   = [];
 
-			// 2) First question only (free renders a single-question poll).
+			// 2) First question only (basic renders a single-question poll).
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$question_row = $wpdb->get_row(
 				$wpdb->prepare(
 					"SELECT id, content
 					FROM {$wpdb->prefix}surveyx_questions
 					WHERE survey_id = %d AND content != ''
-					ORDER BY sorder ASC, id ASC
+					ORDER BY sorder ASC
 					LIMIT 1",
 					$survey_id
 				)
@@ -716,7 +1150,7 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 						"SELECT id, question_id, content
 						FROM {$wpdb->prefix}surveyx_answers
 						WHERE question_id = %d AND content != ''
-						ORDER BY sorder ASC, id ASC",
+						ORDER BY sorder ASC",
 						$question_row->id
 					)
 				);
@@ -730,16 +1164,25 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				}
 			}
 
-			// Swap every image URL for the admin-chosen crop size so the front end
-			// downloads smaller files. Done once here, before the payload is cached.
-			$image_size = self::get_frontend_image_size();
+			// Swap every image URL for the admin-chosen crop size so the front end downloads smaller
+			// files. Done once here, before the payload is cached. Answers get their own size because
+			// they render as thumbnails in a choice list, where a full-size download is pure waste;
+			// the survey content (cover, closings, results) and the question header images are
+			// displayed large, so they stay full-size. This splits only the DEFAULT — once an admin
+			// picks a size explicitly, both resolvers return it and sizing is uniform again.
+			$image_size        = self::get_frontend_image_size();
+			$answer_image_size = self::get_frontend_answer_image_size();
+
 			if ( 'full' !== $image_size ) {
 				self::resize_content_images( $survey->content, $image_size );
 				foreach ( $questions as $question ) {
 					self::resize_content_images( $question->content, $image_size );
 				}
+			}
+
+			if ( 'full' !== $answer_image_size ) {
 				foreach ( $answers as $answer ) {
-					self::resize_content_images( $answer->content, $image_size );
+					self::resize_content_images( $answer->content, $answer_image_size );
 				}
 			}
 
@@ -751,38 +1194,80 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Builds the transient key for a survey's cached static /init payload.
-		 * The plugin version is baked in so a plugin update invalidates every
-		 * survey's cached payload at once should the payload shape ever change.
+		 * Builds the transient key for a survey's cached static /init payload. The plugin version
+		 * is baked in so an update that ever changes the payload shape invalidates every survey's
+		 * cached payload at once.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return string Transient key.
 		 */
 		private static function get_init_static_cache_key( $survey_id ) {
+			// Pro caches every question, basic only the first, so the edition must be
+			// part of the key: the two share a version line and would otherwise collide
+			// on one key, serving each other's payload after a plugin switch.
 			$version = defined( 'SURVEYX_PRO_VERSION' )
-				? SURVEYX_PRO_VERSION
-				: ( defined( 'SURVEYX_VERSION' ) ? SURVEYX_VERSION : '0' );
+				? 'pro_' . SURVEYX_PRO_VERSION
+				: 'basic_' . ( defined( 'SURVEYX_VERSION' ) ? SURVEYX_VERSION : '0' );
 
-			// The chosen image size is baked in so changing it (a global setting)
-			// invalidates every survey's cached payload — the URLs inside differ.
-			$image_size = self::get_frontend_image_size();
+			// The configured image size is baked in so changing it (a global setting)
+			// invalidates every survey's cached payload — the URLs inside differ. The
+			// RAW setting is used rather than a resolved size because the payload now
+			// mixes two sizes; the raw value is the single input both are derived from,
+			// so one key segment still covers every combination. 'auto' stands for "no
+			// explicit choice", which is a different payload from an explicit 'full'.
+			$image_size = self::get_configured_image_size();
 
-			return 'surveyx_init_static_' . $version . '_' . $image_size . '_' . absint( $survey_id );
+			return 'surveyx_init_static_' . $version . '_' . ( '' === $image_size ? 'auto' : $image_size ) . '_' . absint( $survey_id );
+		}
+
+		/** Size used for images that render large: cover, closings, results, question headers. */
+		const DEFAULT_IMAGE_SIZE = 'full';
+
+		/** Size used for answer images, which render as thumbnails in a choice list. */
+		const DEFAULT_ANSWER_IMAGE_SIZE = 'medium';
+
+		/**
+		 * Returns the image size the admin explicitly chose, or '' when they have
+		 * expressed no preference (key absent or empty). The empty string is the
+		 * "automatic" state and is what old installs — which never had the key —
+		 * already look like, so no migration is involved.
+		 *
+		 * @return string A registered image size name, or '' for automatic.
+		 */
+		private static function get_configured_image_size() {
+			$settings = get_option( 'surveyx_settings', [] );
+
+			if ( ! is_array( $settings ) || empty( $settings['frontend_image_size'] ) ) {
+				return '';
+			}
+
+			return sanitize_key( $settings['frontend_image_size'] );
 		}
 
 		/**
-		 * Returns the admin-chosen image size for front-end survey images.
+		 * Returns the image size for front-end survey images that render large —
+		 * the cover, closing and result screens, and question header images.
 		 * Defaults to 'full' (original image) for back-compat and when unset.
 		 *
 		 * @return string A registered image size name, or 'full'.
 		 */
 		public static function get_frontend_image_size() {
-			$settings = get_option( 'surveyx_settings', [] );
-			$size     = is_array( $settings ) && ! empty( $settings['frontend_image_size'] )
-				? $settings['frontend_image_size']
-				: 'full';
+			$size = self::get_configured_image_size();
 
-			return sanitize_key( $size );
+			return '' === $size ? self::DEFAULT_IMAGE_SIZE : $size;
+		}
+
+		/**
+		 * Returns the image size for answer images. These render as thumbnails in a
+		 * choice list, so they default to 'medium' rather than the original file. An
+		 * explicit admin choice still wins and applies everywhere.
+		 *
+		 * @return string A registered image size name.
+		 */
+		public static function get_frontend_answer_image_size() {
+			$size = self::get_configured_image_size();
+
+			return '' === $size ? self::DEFAULT_ANSWER_IMAGE_SIZE : $size;
 		}
 
 		/**
@@ -844,33 +1329,70 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Retrieves the total number of votes (total_votes) for each answer
-		 * grouped by question, for a given survey ID.
+		 * Retrieves the total number of votes (total_votes) for each answer grouped by
+		 * question, together with the moment the tally was computed.
 		 *
 		 * Counts 'answered' status responses with answer_id >= 0 (regular answers + Other).
 		 * Excludes special question types (text_input=-2, contact_info=-3, skipped=-4).
 		 *
 		 * @param int $survey_id The ID of the survey to retrieve vote data for.
 		 *
-		 * @return array|false An array of vote data grouped by question, or false if no data is found.
+		 * @return array{data: array, generated_at: int} Vote data grouped by question -
+		 *                                               an empty `data` means "computed,
+		 *                                               no votes yet" - plus the raw UTC
+		 *                                               epoch the tally was built at.
 		 */
 		public static function get_answer_total_vote( $survey_id ) {
-			// Short-lived cache: the aggregate is a full GROUP BY scan and /vote-results
-			// is hit by every results viewer. Invalidated on each /progress write via
-			// flush_vote_cache(). An empty-array sentinel caches the "no data" case so it
-			// does not re-run the scan on every miss.
+			global $wpdb;
+
+			// Long cache with an explicit invalidation path. The aggregate is a full GROUP BY scan
+			// (226 ms at 180k responses) and /vote-results is hit by every results viewer.
+			// VOTE_CACHE_TTL is a ceiling, NOT the freshness contract: freshness comes from the flush
+			// the /progress write path performs, so the tally a respondent is shown always contains
+			// their own vote. See flush_vote_cache().
+			//
+			// `data` carries the empty-array sentinel, which distinguishes "computed, no votes yet"
+			// from "not cached", so a survey with no votes does not re-run the scan on every open.
+			// `generated_at` is a raw time() UTC epoch handed straight to human_time_diff():
+			// deliberately not a formatted string and not current_time( 'timestamp' ), either of which
+			// would drift by the site's UTC offset.
 			$cache_key = self::get_vote_cache_key( $survey_id );
 			$cached    = get_transient( $cache_key );
-			if ( false !== $cached ) {
-				return empty( $cached ) ? false : $cached;
+
+			// A shape guard, not merely a hit test: an install upgrading with a warm cache still holds
+			// the previous payload (a bare list, or [] for "no votes"), which has no timestamp. Treat
+			// that as a miss and rebuild once.
+			//
+			// The age is then enforced here as well as by the transient. get_transient() reports a hit
+			// whenever the value row outlives its _transient_timeout_ row, which several persistent
+			// object caches produce under eviction; the payload would then be served for ever, with
+			// the endpoint's "Updated N ago" label growing without bound beside it. A generated_at in
+			// the future — clock skew, a restored database — is a miss too, not infinite freshness.
+			if ( is_array( $cached ) && isset( $cached['data'] ) && isset( $cached['generated_at'] ) ) {
+				$age = time() - (int) $cached['generated_at'];
+
+				if ( $age >= 0 && $age < self::VOTE_CACHE_TTL ) {
+					return $cached;
+				}
 			}
 
-			// Respondent-facing count: include the "Other" choice (answer_id = 0).
-			$query_result = self::count_votes_by_answer( $survey_id, true );
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$query_result = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT
+                        r.question_id,
+                        r.answer_id,
+                        COUNT(*) AS total_votes
+                    FROM {$wpdb->prefix}surveyx_responses AS r
+                    WHERE r.survey_id = %d AND r.answer_id >= 0 AND r.response_status = 'answered'
+                    GROUP BY r.question_id, r.answer_id
+                    ORDER BY r.question_id, r.answer_id",
+					$survey_id
+				)
+			);
 
 			if ( ! $query_result ) {
-				set_transient( $cache_key, [], self::VOTE_CACHE_TTL );
-				return false;
+				return self::cache_vote_results( $cache_key, [] );
 			}
 
 			$grouped_total_votes = [];
@@ -878,7 +1400,7 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			foreach ( $query_result as $row ) {
 				$question_id = $row->question_id;
 				$answer_id   = (int) $row->answer_id;
-				$total_votes = (int) $row->votes;
+				$total_votes = (int) $row->total_votes;
 
 				if ( ! isset( $grouped_total_votes[ $question_id ] ) ) {
 					$grouped_total_votes[ $question_id ] = [];
@@ -890,46 +1412,37 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				];
 			}
 
-			$result = array_values( $grouped_total_votes );
-			set_transient( $cache_key, $result, self::VOTE_CACHE_TTL );
-
-			return $result;
+			return self::cache_vote_results( $cache_key, array_values( $grouped_total_votes ) );
 		}
 
 		/**
-		 * Aggregates 'answered' responses into per-answer vote counts for a survey.
+		 * Stamps a freshly computed vote tally and stores it under the vote cache key.
 		 *
-		 * Single source of truth for the "votes per answer" GROUP BY used by both the
-		 * respondent-facing /vote-results (get_answer_total_vote) and the admin summary
-		 * (get_answer_votes). The only difference between the two callers is whether the
-		 * "Other" choice (answer_id = 0) is counted, so it is a parameter here.
+		 * @param string $cache_key Transient key from get_vote_cache_key().
+		 * @param array  $data      Vote data grouped by question; empty for "no votes yet".
 		 *
-		 * @param int  $survey_id     Survey ID.
-		 * @param bool $include_other Whether to include the "Other" choice (answer_id = 0).
-		 * @return array List of rows with `question_id`, `answer_id`, `votes`.
+		 * @return array{data: array, generated_at: int} The payload that was cached.
 		 */
-		private static function count_votes_by_answer( $survey_id, $include_other ) {
-			global $wpdb;
+		private static function cache_vote_results( $cache_key, $data ) {
+			$payload = [
+				'data'         => $data,
+				'generated_at' => time(),
+			];
 
-			// include_other=true keeps answer_id 0 (Other); false counts real answers only.
-			$min_answer_id = $include_other ? 0 : 1;
+			set_transient( $cache_key, $payload, self::VOTE_CACHE_TTL );
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			return $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT r.question_id, r.answer_id, COUNT(*) AS votes
-					FROM {$wpdb->prefix}surveyx_responses AS r
-					WHERE r.survey_id = %d AND r.answer_id >= %d AND r.response_status = 'answered'
-					GROUP BY r.question_id, r.answer_id
-					ORDER BY r.question_id, r.answer_id",
-					$survey_id,
-					$min_answer_id
-				)
-			);
+			return $payload;
 		}
 
-		/** Vote-results cache lifetime in seconds. */
-		const VOTE_CACHE_TTL = 60;
+		/**
+		 * Vote-results cache lifetime.
+		 *
+		 * A ceiling, not a freshness window: every write that moves the tally flushes
+		 * the key, so this only bounds how long an unread, unchanged tally may sit. At
+		 * 60 seconds a busy poll cleared the cache faster than it could ever be reused
+		 * - the load the cache exists to absorb was the load that kept it cold.
+		 */
+		const VOTE_CACHE_TTL = 12 * HOUR_IN_SECONDS;
 
 		/**
 		 * Builds the transient key for a survey's cached vote aggregate.
@@ -943,13 +1456,51 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 
 		/**
 		 * Invalidates the cached /vote-results aggregate for a survey.
-		 * Called from the /progress write path whenever responses change.
+		 *
+		 * Called from every path that moves the tally: the respondent's own /progress
+		 * write, admin question/answer deletion, Allow Revote on Update, and the
+		 * drop-off sweep. With VOTE_CACHE_TTL at 12 hours this flush IS the freshness
+		 * contract - without it a voter would be served a tally that predates their
+		 * own vote for the rest of the day.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return void
 		 */
 		public static function flush_vote_cache( $survey_id ) {
 			delete_transient( self::get_vote_cache_key( $survey_id ) );
+		}
+
+		/**
+		 * Invalidates the cached admin analytics for a survey.
+		 *
+		 * The one place the analytics cache keys are known outside the analytics class, so every
+		 * path that changes a session or a response — completion, off-path pruning, the drop-off
+		 * sweep, a reset, a session deletion — has a single call to make and cannot invalidate
+		 * half of it.
+		 *
+		 * Both keys are deleted: `surveyx_summary_<id>` was the pre-2.0 six-hour recount gate and
+		 * an install upgrading with a warm cache still holds it, and `surveyx_summary_snap_<id>`
+		 * is the snapshot the admin screens actually read.
+		 *
+		 * The analytics class is loaded only in admin, REST and cron contexts, so the key is
+		 * rebuilt inline when it is absent rather than assumed.
+		 *
+		 * @param int $survey_id Survey ID.
+		 * @return void
+		 */
+		public static function flush_analytics_cache( $survey_id ) {
+			$survey_id = absint( $survey_id );
+
+			if ( $survey_id <= 0 ) {
+				return;
+			}
+
+			delete_transient( 'surveyx_summary_' . $survey_id );
+			delete_transient(
+				class_exists( 'SurveyX_Analytics_Db' )
+					? SurveyX_Analytics_Db::snapshot_key( $survey_id )
+					: 'surveyx_summary_snap_' . $survey_id
+			);
 		}
 
 		/**
@@ -968,8 +1519,8 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				'recaptcha_v2_site_key'   => '',
 				'recaptcha_v2_secret_key' => '',
 				'show_alphabet_labels'    => true,
-				'frontend_image_size'     => 'full',
-				'skip_question_cover_import' => true,
+				'frontend_image_size'     => '',
+				'default_cover_layout'    => 'stacked',
 			];
 
 			$settings = get_option( 'surveyx_settings', $default_settings );
@@ -984,19 +1535,42 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		/**
 		 * Updates plugin settings.
 		 *
+		 * update_option() returns false both on a genuine write failure and when the new value is
+		 * identical to what is already stored (e.g. a save that only changes the separately-stored
+		 * page_base option leaves this blob unchanged). Compare against the previously stored
+		 * value so an unchanged save is still reported as a success.
+		 *
 		 * @param array $data Settings data array.
 		 *
 		 * @return array|false Settings array on success, false on failure.
 		 */
 		public static function update_settings( $data ) {
-			$result = update_option( 'surveyx_settings', $data );
+			$current = get_option( 'surveyx_settings' );
+			$result  = update_option( 'surveyx_settings', $data );
+
+			if ( ! $result && maybe_serialize( $data ) === maybe_serialize( $current ) ) {
+				return $data;
+			}
 
 			return $result ? $data : false;
 		}
 
 		/**
 		 * Increments view count when survey is loaded.
-		 * Updates the surveyx_summary table with total views.
+		 *
+		 * Writes to surveyx_surveys.total_views once the [views_to_surveys] migration step is
+		 * recorded, and to the surveyx_summary accumulator before that.
+		 *
+		 * The fallback is not defensive padding, it is the correctness of this method on a live
+		 * site. This runs from /init, which is a REST route, and the runner's DDL gate refuses
+		 * REST — so the migration cannot have happened on the request that first executes this
+		 * code, and WordPress fires no activation hook on a plugin update either. On an install
+		 * with DISABLE_WP_CRON, no system cron and an owner who never opens wp-admin, the column
+		 * may not exist for a long time; assuming it would mean `Unknown column 'total_views'` on
+		 * every survey view for exactly as long as that lasts.
+		 *
+		 * Keeping the summary upsert also keeps a rollback to a pre-2.0 build working: that build
+		 * reads the accumulator out of surveyx_summary, and finds it there.
 		 *
 		 * @param int $survey_id The ID of the survey.
 		 *
@@ -1004,6 +1578,20 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		 */
 		public static function increment_view_count( $survey_id ) {
 			global $wpdb;
+
+			if ( function_exists( 'surveyx_views_on_surveys_table' ) && surveyx_views_on_surveys_table() ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE {$wpdb->prefix}surveyx_surveys
+                        SET total_views = total_views + 1
+                        WHERE id = %d",
+						$survey_id
+					)
+				);
+
+				return;
+			}
 
 			$utc_now = surveyx_get_utc_now();
 
@@ -1023,42 +1611,81 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			);
 		}
 
-		// =====================================================================
-		// SUMMARY / CRON DATABASE METHODS
-		// =====================================================================
-
 		/**
 		 * Gets session statistics for a survey.
 		 *
+		 * Everything but `views` is counted from surveyx_sessions. `views` is the accumulator, and
+		 * which table holds it depends on whether the [views_to_surveys] migration step has been
+		 * recorded — the same gate increment_view_count() writes through, so the read and the
+		 * write can never be looking at different tables. Only the anchor table changes: both
+		 * shapes are one row per survey joined to that survey's sessions.
+		 *
+		 * One deliberate difference in the post-migration shape. Anchored on surveyx_summary, a
+		 * survey with NO summary row produced no result at all and every figure here read 0 even
+		 * with live sessions in the table. Anchored on surveyx_surveys the row always exists, so
+		 * such a survey now reports its real session counts against a view count of 0. That is the
+		 * intended fix, not an accident of the rewrite.
+		 *
+		 * `avg_time` is bounded by MAX_RESPONSE_TIME_SECONDS and is NULL — not 0 — when the survey
+		 * has no completed session inside that bound. See the constant for why an unbounded mean
+		 * over this column is not a response time.
+		 *
+		 * `dropoffs` counts SurveyX_Session_Manager::dropped_off_sql(), not the stored status
+		 * alone: an abandoned session is one the hourly sweep HAS marked or one it WOULD mark, so
+		 * the figure no longer depends on when cron last ran.
+		 *
 		 * @param int $survey_id Survey ID.
-		 * @return array Stats array with views, starts, completions, dropoffs, avg_time.
+		 * @return array Stats array with views, starts, completions, dropoffs, avg_time
+		 *               (int|null).
 		 */
 		public static function get_session_stats( $survey_id ) {
 			global $wpdb;
 
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( function_exists( 'surveyx_views_on_surveys_table' ) && surveyx_views_on_surveys_table() ) {
+				$anchor    = $wpdb->prefix . 'surveyx_surveys';
+				$anchor_id = 's.id';
+			} else {
+				$anchor    = $wpdb->prefix . 'surveyx_summary';
+				$anchor_id = 's.survey_id';
+			}
+
+			// Drop-offs are counted from the predicate the hourly sweep writes down
+			// rather than from the status it writes, so the figure is right on an install
+			// whose cron never runs and unchanged on one whose cron does.
+			$dropped_off = SurveyX_Session_Manager::dropped_off_sql( 'ss' );
+
+			// $anchor and $anchor_id are literals chosen by the branch above, never
+			// caller input; $dropped_off is a self-prepared fragment with its cutoff
+			// already bound; $survey_id and the time bound are bound.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row(
 				$wpdb->prepare(
 					"SELECT
                     s.total_views as views,
                     SUM(ss.session_status != 'viewed' AND ss.session_status != 'expired') as total,
                     SUM(ss.session_status = 'completed') as completions,
-                    SUM(ss.session_status = 'dropped_off') as dropoffs,
-                    AVG(CASE WHEN ss.session_status = 'completed' THEN ss.time_spent END) as avg_time
-                FROM {$wpdb->prefix}surveyx_summary s
-                LEFT JOIN {$wpdb->prefix}surveyx_sessions ss ON s.survey_id = ss.survey_id
-                WHERE s.survey_id = %d
-                GROUP BY s.survey_id",
+                    SUM({$dropped_off}) as dropoffs,
+                    AVG(CASE WHEN ss.session_status = 'completed' AND ss.time_spent > 0 AND ss.time_spent <= %d THEN ss.time_spent END) as avg_time
+                FROM {$anchor} s
+                LEFT JOIN {$wpdb->prefix}surveyx_sessions ss ON {$anchor_id} = ss.survey_id
+                WHERE {$anchor_id} = %d
+                GROUP BY {$anchor_id}",
+					self::MAX_RESPONSE_TIME_SECONDS,
 					$survey_id
 				)
 			);
+
+			// avg_time stays NULL when nothing was measurable: AVG() over no qualifying
+			// row is NULL, and (int) NULL is 0 — the confident wrong number this
+			// deliberately avoids.
+			$avg_time = ( ! isset( $row->avg_time ) || null === $row->avg_time ) ? null : (int) $row->avg_time;
 
 			return [
 				'views'       => (int) ( $row->views ?? 0 ),
 				'starts'      => (int) ( $row->total ?? 0 ),
 				'completions' => (int) ( $row->completions ?? 0 ),
 				'dropoffs'    => (int) ( $row->dropoffs ?? 0 ),
-				'avg_time'    => (int) ( $row->avg_time ?? 0 ),
+				'avg_time'    => $avg_time,
 			];
 		}
 
@@ -1071,12 +1698,15 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		public static function get_most_common_dropoff( $survey_id ) {
 			global $wpdb;
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$dropped_off = SurveyX_Session_Manager::dropped_off_sql();
+
+            // $dropped_off is a self-prepared fragment with its cutoff already bound.
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			return $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT current_question_id
                 FROM {$wpdb->prefix}surveyx_sessions
-                WHERE survey_id = %d AND session_status = 'dropped_off' AND current_question_id > 0
+                WHERE survey_id = %d AND {$dropped_off} AND current_question_id > 0
                 GROUP BY current_question_id
                 ORDER BY COUNT(*) DESC
                 LIMIT 1",
@@ -1086,47 +1716,28 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Gets seen count per question from responses table.
-		 *
-		 * @param int $survey_id Survey ID.
-		 * @return array Associative array {question_id => count}.
-		 */
-		public static function get_question_seen_counts( $survey_id ) {
-			global $wpdb;
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$results = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT question_id, COUNT(DISTINCT session_id) as count
-                FROM {$wpdb->prefix}surveyx_responses
-                WHERE survey_id = %d AND viewed_at IS NOT NULL
-                GROUP BY question_id",
-					$survey_id
-				)
-			);
-
-			$counts = [];
-			foreach ( $results as $row ) {
-				$counts[ (string) $row->question_id ] = (int) $row->count;
-			}
-
-			return $counts;
-		}
-
-		/**
 		 * Gets vote count per answer from responses.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return array Associative array {answer_id => count}.
 		 */
 		public static function get_answer_votes( $survey_id ) {
-			// Admin summary count: real answers only, excluding the "Other" choice
-			// (answer_id = 0), which get_answers_for_summary() adds separately.
-			$results = self::count_votes_by_answer( $survey_id, false );
+			global $wpdb;
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT answer_id, COUNT(*) as vote_count
+                FROM {$wpdb->prefix}surveyx_responses
+                WHERE survey_id = %d AND answer_id > 0 AND response_status = 'answered'
+                GROUP BY answer_id",
+					$survey_id
+				)
+			);
 
 			$votes = [];
 			foreach ( $results as $row ) {
-				$votes[ (string) $row->answer_id ] = (int) $row->votes;
+				$votes[ (string) $row->answer_id ] = (int) $row->vote_count;
 			}
 
 			return $votes;
@@ -1158,55 +1769,6 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			}
 
 			return $counts;
-		}
-
-		/**
-		 * Upserts summary data into database.
-		 *
-		 * @param int   $survey_id Survey ID.
-		 * @param array $data      Summary data.
-		 */
-		public static function upsert_summary( $survey_id, $data ) {
-			global $wpdb;
-
-			$utc_now = surveyx_get_utc_now();
-
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->query(
-				$wpdb->prepare(
-					"INSERT INTO {$wpdb->prefix}surveyx_summary
-                (survey_id, total_views, total_starts, total_completions, total_dropoffs,
-                 completion_rate, dropoff_rate, average_time_seconds, most_common_dropoff_question_id,
-                 question_seen_counts, answer_votes_json, response_count_by_question, last_updated)
-                VALUES (%d, %d, %d, %d, %d, %f, %f, %d, %d, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    total_starts = VALUES(total_starts),
-                    total_completions = VALUES(total_completions),
-                    total_dropoffs = VALUES(total_dropoffs),
-                    completion_rate = VALUES(completion_rate),
-                    dropoff_rate = VALUES(dropoff_rate),
-                    average_time_seconds = VALUES(average_time_seconds),
-                    most_common_dropoff_question_id = VALUES(most_common_dropoff_question_id),
-                    question_seen_counts = VALUES(question_seen_counts),
-                    answer_votes_json = VALUES(answer_votes_json),
-                    response_count_by_question = VALUES(response_count_by_question),
-                    last_updated = %s",
-					$survey_id,
-					$data['total_views'],
-					$data['total_starts'],
-					$data['total_completions'],
-					$data['total_dropoffs'],
-					$data['completion_rate'],
-					$data['dropoff_rate'],
-					$data['average_time_seconds'],
-					$data['most_common_dropoff_question_id'],
-					$data['question_seen_counts'] ?? '{}',
-					$data['answer_votes_json'] ?? '{}',
-					$data['response_count_by_question'] ?? '{}',
-					$utc_now,
-					$utc_now
-				)
-			);
 		}
 	}
 }
