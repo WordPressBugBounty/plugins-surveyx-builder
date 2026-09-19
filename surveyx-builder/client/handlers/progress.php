@@ -145,6 +145,11 @@ if ( ! class_exists( 'SurveyX_Progress_Handler', false ) ) {
 				);
 			}
 
+			// Stamped BEFORE the write, deliberately: the client overlays this vote onto the cached
+			// tally only while this stamp is newer than the tally's generated_at. Stamping after the
+			// insert could outrun a tally that already counts the vote, and show it twice.
+			$write_time = surveyx_get_utc_now();
+
 			$result = self::create_response_and_update_session(
 				$session,
 				$survey_id,
@@ -161,8 +166,9 @@ if ( ! class_exists( 'SurveyX_Progress_Handler', false ) ) {
 
 			return new WP_REST_Response(
 				[
-					'ok'      => true,
-					'message' => esc_html__( 'Progress saved successfully!', 'surveyx-builder' ),
+					'ok'          => true,
+					'message'     => esc_html__( 'Progress saved successfully!', 'surveyx-builder' ),
+					'answered_at' => $write_time,
 				],
 				200
 			);
@@ -353,23 +359,6 @@ if ( ! class_exists( 'SurveyX_Progress_Handler', false ) ) {
 					[ 'status' => 500 ]
 				);
 			}
-
-			/*
-			 * Flush the /vote-results aggregate this write just changed. This is what
-			 * makes a 12-hour VOTE_CACHE_TTL safe: at that TTL the read is almost always
-			 * a hit, so without a flush a respondent who votes and opens the results is
-			 * shown a tally predating their own vote for up to twelve hours. The cost is
-			 * one rebuild per write BURST - the next reader repopulates the cache - so
-			 * the long TTL keeps nearly all its saving.
-			 *
-			 * Unconditional on purpose: more than a plain vote moves the tally (the
-			 * DELETE-then-INSERT above rewrites a changed selection, a switch to
-			 * skipped_optional removes rows), and this path never loads the survey row
-			 * that would say whether results can be shown at all. On survey, quiz and
-			 * feedback types nothing populates the key, so this is one indexed option
-			 * lookup that deletes nothing.
-			 */
-			SurveyX_Db::flush_vote_cache( $survey_id );
 
 			if ( 'contact_info' === $question_type && ! empty( $content ) ) {
 				SurveyX_Session_Manager::update_contact_info(

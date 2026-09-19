@@ -482,6 +482,9 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 		/**
 		 * Sanitize closings array for output.
 		 *
+		 * `id` is a UUID string, not an int: ClosingPage.vue resolves a skip-logic jump by
+		 * matching it, so dropping it sends every jump to closing #0.
+		 *
 		 * @param array $closings Closings data array.
 		 * @return array Sanitized closings array.
 		 */
@@ -495,12 +498,17 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 
 			foreach ( $closings as $closing ) {
 				$sanitized[] = [
+					'id'          => sanitize_text_field( $closing['id'] ?? '' ),
 					'title'       => wp_kses( $closing['title'] ?? '', $allowed_html ),
 					'description' => wp_kses( $closing['description'] ?? '', $allowed_html ),
 					'image_url'   => esc_url( $closing['image_url'] ?? '' ),
 					'image_w'     => absint( $closing['image_w'] ?? 0 ),
 					'image_h'     => absint( $closing['image_h'] ?? 0 ),
 					'image_alt'   => esc_attr( $closing['image_alt'] ?? '' ),
+					'enable_cta'  => ! empty( $closing['enable_cta'] ),
+					'cta_label'   => sanitize_text_field( $closing['cta_label'] ?? '' ),
+					'cta_url'     => esc_url_raw( $closing['cta_url'] ?? '' ),
+					'cta_new_tab' => (bool) ( $closing['cta_new_tab'] ?? true ),
 				];
 			}
 
@@ -509,6 +517,9 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 
 		/**
 		 * Sanitize results array for output.
+		 *
+		 * `id` is a UUID string, not an int: result-helpers.js resolves a skip-logic jump by
+		 * matching it, so dropping it sends every jump to result #0.
 		 *
 		 * @param array $results Results data array.
 		 * @return array Sanitized results array.
@@ -523,12 +534,17 @@ if ( ! class_exists( 'SurveyX_Init_Handler', false ) ) {
 
 			foreach ( $results as $result ) {
 				$sanitized[] = [
+					'id'          => sanitize_text_field( $result['id'] ?? '' ),
 					'title'       => wp_kses( $result['title'] ?? '', $allowed_html ),
 					'description' => wp_kses( $result['description'] ?? '', $allowed_html ),
 					'image_url'   => esc_url( $result['image_url'] ?? '' ),
 					'image_w'     => absint( $result['image_w'] ?? 0 ),
 					'image_h'     => absint( $result['image_h'] ?? 0 ),
 					'image_alt'   => esc_attr( $result['image_alt'] ?? '' ),
+					'enable_cta'  => ! empty( $result['enable_cta'] ),
+					'cta_label'   => sanitize_text_field( $result['cta_label'] ?? '' ),
+					'cta_url'     => esc_url_raw( $result['cta_url'] ?? '' ),
+					'cta_new_tab' => (bool) ( $result['cta_new_tab'] ?? true ),
 				];
 			}
 

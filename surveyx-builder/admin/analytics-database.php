@@ -38,7 +38,11 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 		 * @return string Transient key.
 		 */
 		public static function snapshot_key( int $survey_id ) {
-			return 'surveyx_summary_snap_' . $survey_id;
+			// Edition-segmented: Free and Pro measure different maps into this payload
+			// (matrix_counts, dropoff_by_question, scale_responses), snapshot_is_fresh()
+			// only checks the stamp, and nothing flushes on an edition switch — so a shared
+			// key serves the other edition's shape and renders grids of zeros.
+			return 'surveyx_summary_snap_' . SurveyX_Db::get_cache_edition_segment() . '_' . $survey_id;
 		}
 
 		/**
@@ -302,7 +306,11 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 		}
 
 		/**
-		 * Get questions for a survey
+		 * Get questions for a survey, in the author's order.
+		 *
+		 * The ORDER BY is load-bearing: the analytics screens read array position as the
+		 * question number and as progress through the survey, so an id-ordered result
+		 * mislabels every question after an insert or a drag-reorder.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return array Questions array with minimal content.
@@ -314,7 +322,8 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 			$questions = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT id, content FROM {$wpdb->prefix}surveyx_questions
-					WHERE survey_id = %d",
+					WHERE survey_id = %d
+					ORDER BY sorder ASC, id ASC",
 					$survey_id
 				)
 			);
@@ -330,6 +339,7 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 					'type'              => $full_content['type'] ?? 'check_box',
 					'image_url'         => $full_content['image_url'] ?? '',
 					'show_other_option' => ! empty( $full_content['show_other_option'] ),
+					'is_required'       => ! empty( $full_content['is_required'] ),
 				];
 			}
 
@@ -356,7 +366,8 @@ if ( ! class_exists( 'SurveyX_Analytics_Db', false ) ) {
 				$wpdb->prepare(
 					"SELECT a.id, a.question_id, a.content
 					FROM {$wpdb->prefix}surveyx_answers a
-					WHERE a.survey_id = %d",
+					WHERE a.survey_id = %d
+					ORDER BY a.question_id ASC, a.sorder ASC, a.id ASC",
 					$survey_id
 				)
 			);

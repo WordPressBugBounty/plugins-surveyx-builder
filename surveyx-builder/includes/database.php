@@ -478,9 +478,8 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			// of the cache.
 			self::flush_analytics_cache( $survey_id );
 
-			// Flush the respondent-facing vote cache so /vote-results does not serve the pre-reset
-			// counts: VOTE_CACHE_TTL is 12 HOURS, so without this flush a respondent could be shown
-			// the discarded tally for the rest of the day.
+			// Flush the respondent-facing vote cache so /vote-results does not go on serving the
+			// pre-reset counts for the rest of VOTE_CACHE_TTL.
 			self::flush_vote_cache( $survey_id );
 
 			return $result;
@@ -1024,10 +1023,12 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			if ( ! empty( $respondent_id ) ) {
 				global $wpdb;
 
+				// answered_at is what lets the client tell which of its own votes the cached
+				// /vote-results tally already counts, so it can overlay only the rest.
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$responses = $wpdb->get_results(
 					$wpdb->prepare(
-						"SELECT id, question_id, answer_id, respondent_id, response_content, response_status
+						"SELECT id, question_id, answer_id, respondent_id, response_content, response_status, answered_at
 						FROM {$wpdb->prefix}surveyx_responses
 						WHERE survey_id = %d AND respondent_id = %s",
 						$survey_id,
@@ -1194,20 +1195,32 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Builds the transient key for a survey's cached static /init payload. The plugin version
-		 * is baked in so an update that ever changes the payload shape invalidates every survey's
-		 * cached payload at once.
+		 * Edition + version segment shared by every cache key whose payload shape differs
+		 * between Free and Pro.
+		 *
+		 * The two editions share a version line and one transient namespace, so without this
+		 * they collide on one key and serve each other's payload after a plugin switch — and
+		 * the edition is never actually deactivated (Free early-returns under the Pro guard),
+		 * so nothing flushes on the way through. Baking the version in also retires every
+		 * warm entry on an update that changes a payload's shape.
+		 *
+		 * @return string Key segment, e.g. 'pro_2.0.1'.
+		 */
+		public static function get_cache_edition_segment() {
+			return defined( 'SURVEYX_PRO_VERSION' )
+				? 'pro_' . SURVEYX_PRO_VERSION
+				: 'basic_' . ( defined( 'SURVEYX_VERSION' ) ? SURVEYX_VERSION : '0' );
+		}
+
+		/**
+		 * Builds the transient key for a survey's cached static /init payload.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return string Transient key.
 		 */
 		private static function get_init_static_cache_key( $survey_id ) {
-			// Pro caches every question, basic only the first, so the edition must be
-			// part of the key: the two share a version line and would otherwise collide
-			// on one key, serving each other's payload after a plugin switch.
-			$version = defined( 'SURVEYX_PRO_VERSION' )
-				? 'pro_' . SURVEYX_PRO_VERSION
-				: 'basic_' . ( defined( 'SURVEYX_VERSION' ) ? SURVEYX_VERSION : '0' );
+			// Pro caches every question, basic only the first, so the payload is edition-shaped.
+			$version = self::get_cache_edition_segment();
 
 			// The configured image size is baked in so changing it (a global setting)
 			// invalidates every survey's cached payload — the URLs inside differ. The
@@ -1332,24 +1345,29 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		 * Retrieves the total number of votes (total_votes) for each answer grouped by
 		 * question, together with the moment the tally was computed.
 		 *
-		 * Counts 'answered' status responses with answer_id >= 0 (regular answers + Other).
-		 * Excludes special question types (text_input=-2, contact_info=-3, skipped=-4).
+		 * Counts 'answered' responses with answer_id >= 0 (regular answers + Other) whose question
+		 * and answer still exist - deleting either leaves its response rows behind, so existence is
+		 * joined for, never assumed. Negative sentinels (text_input=-2, contact_info=-3, skipped=-4,
+		 * seen=-8) are excluded by the answer_id floor.
 		 *
 		 * @param int $survey_id The ID of the survey to retrieve vote data for.
 		 *
-		 * @return array{data: array, generated_at: int} Vote data grouped by question -
-		 *                                               an empty `data` means "computed,
-		 *                                               no votes yet" - plus the raw UTC
-		 *                                               epoch the tally was built at.
+		 * @return array{data: array, generated_at: int} Vote groups, positional and each entry
+		 *                                               tagged with its question_id - an empty
+		 *                                               `data` means "computed, no votes yet" -
+		 *                                               plus the raw UTC epoch the tally was
+		 *                                               built at.
 		 */
 		public static function get_answer_total_vote( $survey_id ) {
 			global $wpdb;
 
-			// Long cache with an explicit invalidation path. The aggregate is a full GROUP BY scan
-			// (226 ms at 180k responses) and /vote-results is hit by every results viewer.
-			// VOTE_CACHE_TTL is a ceiling, NOT the freshness contract: freshness comes from the flush
-			// the /progress write path performs, so the tally a respondent is shown always contains
-			// their own vote. See flush_vote_cache().
+			// Lazy read-through cache: a miss computes the tally, stores it and serves it in the same
+			// request. The aggregate is a full GROUP BY scan (226 ms at 180k responses) and
+			// /vote-results is hit by every results viewer.
+			//
+			// VOTE_CACHE_TTL IS the freshness contract, deliberately: no vote flushes this key, so the
+			// tally may be missing up to a TTL of other people's votes, and need not contain the
+			// viewer's own - the client overlays that, for that viewer alone.
 			//
 			// `data` carries the empty-array sentinel, which distinguishes "computed, no votes yet"
 			// from "not cached", so a survey with no votes does not re-run the scan on every open.
@@ -1359,15 +1377,9 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			$cache_key = self::get_vote_cache_key( $survey_id );
 			$cached    = get_transient( $cache_key );
 
-			// A shape guard, not merely a hit test: an install upgrading with a warm cache still holds
-			// the previous payload (a bare list, or [] for "no votes"), which has no timestamp. Treat
-			// that as a miss and rebuild once.
-			//
-			// The age is then enforced here as well as by the transient. get_transient() reports a hit
-			// whenever the value row outlives its _transient_timeout_ row, which several persistent
-			// object caches produce under eviction; the payload would then be served for ever, with
-			// the endpoint's "Updated N ago" label growing without bound beside it. A generated_at in
-			// the future — clock skew, a restored database — is a miss too, not infinite freshness.
+			// Shape + age guard, not a hit test: a pre-2.0 payload has no timestamp and rebuilds once; a change
+			// WITHIN the current shape is invisible here - the versioned key's job. Age is rechecked because some
+			// object caches report a hit on an expired value, and a future generated_at (skew, restore) is a miss.
 			if ( is_array( $cached ) && isset( $cached['data'] ) && isset( $cached['generated_at'] ) ) {
 				$age = time() - (int) $cached['generated_at'];
 
@@ -1376,17 +1388,26 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				}
 			}
 
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// Aggregate FIRST, join second: the GROUP BY is a full scan (226 ms at 180k responses), so the
+			// existence checks must run on the grouped rows, never the raw ones. answer_id = 0 is "Other"
+			// and has no surveyx_answers row - an INNER JOIN there would silently drop every Other vote.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Aggregate over custom tables with no core API; cached in the transient read above.
 			$query_result = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT
-                        r.question_id,
-                        r.answer_id,
-                        COUNT(*) AS total_votes
-                    FROM {$wpdb->prefix}surveyx_responses AS r
-                    WHERE r.survey_id = %d AND r.answer_id >= 0 AND r.response_status = 'answered'
-                    GROUP BY r.question_id, r.answer_id
-                    ORDER BY r.question_id, r.answer_id",
+					"SELECT t.question_id, t.answer_id, t.total_votes
+                    FROM (
+                        SELECT r.question_id, r.answer_id, COUNT(*) AS total_votes
+                        FROM {$wpdb->prefix}surveyx_responses AS r
+                        WHERE r.survey_id = %d AND r.answer_id >= 0 AND r.response_status = 'answered'
+                        GROUP BY r.question_id, r.answer_id
+                    ) AS t
+                    INNER JOIN {$wpdb->prefix}surveyx_questions AS q
+                            ON q.id = t.question_id AND q.survey_id = %d
+                    LEFT JOIN {$wpdb->prefix}surveyx_answers AS a
+                            ON a.id = t.answer_id AND a.question_id = t.question_id
+                    WHERE t.answer_id = 0 OR a.id IS NOT NULL
+                    ORDER BY t.question_id, t.answer_id",
+					$survey_id,
 					$survey_id
 				)
 			);
@@ -1407,11 +1428,15 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 				}
 
 				$grouped_total_votes[ $question_id ][] = [
-					'answer_id' => $answer_id,
-					'votes'     => $total_votes,
+					'question_id' => (int) $question_id,
+					'answer_id'   => $answer_id,
+					'votes'       => $total_votes,
 				];
 			}
 
+			// array_values() is load-bearing: `data` must stay a positional JSON array of arrays,
+			// because a respondent still running the pre-fix client reads data[0].find(). The
+			// question_id inside each entry is what lets the current client match group to question.
 			return self::cache_vote_results( $cache_key, array_values( $grouped_total_votes ) );
 		}
 
@@ -1435,33 +1460,36 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		}
 
 		/**
-		 * Vote-results cache lifetime.
+		 * Vote-results cache lifetime, and the tally's entire freshness contract: no vote
+		 * flushes this key, so other people's votes surface only once it expires.
 		 *
-		 * A ceiling, not a freshness window: every write that moves the tally flushes
-		 * the key, so this only bounds how long an unread, unchanged tally may sit. At
-		 * 60 seconds a busy poll cleared the cache faster than it could ever be reused
-		 * - the load the cache exists to absorb was the load that kept it cold.
+		 * 15 minutes is the trade - short enough that a shared tally is not visibly stale,
+		 * long enough that a busy poll still gets hits instead of one full GROUP BY scan per
+		 * vote. The viewer's own vote does not wait for it; the client adds it client-side.
 		 */
-		const VOTE_CACHE_TTL = 12 * HOUR_IN_SECONDS;
+		const VOTE_CACHE_TTL = 15 * MINUTE_IN_SECONDS;
 
 		/**
 		 * Builds the transient key for a survey's cached vote aggregate.
+		 *
+		 * Versioned: v2 entries carry question_id and exclude orphan rows, and the payload guard in
+		 * get_answer_total_vote() only checks that the keys exist, so a warm v1 transient would go
+		 * on serving the old, wrong tally for the rest of its TTL. The segment retires it instead.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return string Transient key.
 		 */
 		private static function get_vote_cache_key( $survey_id ) {
-			return 'surveyx_votes_' . absint( $survey_id );
+			return 'surveyx_votes_v2_' . absint( $survey_id );
 		}
 
 		/**
 		 * Invalidates the cached /vote-results aggregate for a survey.
 		 *
-		 * Called from every path that moves the tally: the respondent's own /progress
-		 * write, admin question/answer deletion, Allow Revote on Update, and the
-		 * drop-off sweep. With VOTE_CACHE_TTL at 12 hours this flush IS the freshness
-		 * contract - without it a voter would be served a tally that predates their
-		 * own vote for the rest of the day.
+		 * Reserved for the rare paths that remove or rewrite rows the tally already counted:
+		 * a session restart, admin question/answer deletion, Allow Revote on Update, a survey
+		 * reset, and the drop-off sweeps. The ordinary vote path does NOT flush - ordinary
+		 * votes surface when VOTE_CACHE_TTL expires.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return void
@@ -1479,11 +1507,13 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 		 * half of it.
 		 *
 		 * Both keys are deleted: `surveyx_summary_<id>` was the pre-2.0 six-hour recount gate and
-		 * an install upgrading with a warm cache still holds it, and `surveyx_summary_snap_<id>`
-		 * is the snapshot the admin screens actually read.
+		 * an install upgrading with a warm cache still holds it, and the snapshot key is what the
+		 * admin screens actually read.
 		 *
 		 * The analytics class is loaded only in admin, REST and cron contexts, so the key is
-		 * rebuilt inline when it is absent rather than assumed.
+		 * rebuilt inline when it is absent rather than assumed — the inline form must stay a
+		 * mirror of SurveyX_Analytics_Db::snapshot_key(), which is why both build it from
+		 * get_cache_edition_segment() instead of spelling the segment out twice.
 		 *
 		 * @param int $survey_id Survey ID.
 		 * @return void
@@ -1499,7 +1529,7 @@ if ( ! class_exists( 'SurveyX_Db', false ) ) {
 			delete_transient(
 				class_exists( 'SurveyX_Analytics_Db' )
 					? SurveyX_Analytics_Db::snapshot_key( $survey_id )
-					: 'surveyx_summary_snap_' . $survey_id
+					: 'surveyx_summary_snap_' . self::get_cache_edition_segment() . '_' . $survey_id
 			);
 		}
 

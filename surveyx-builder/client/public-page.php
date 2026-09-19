@@ -903,6 +903,13 @@ if ( ! class_exists( 'SurveyX_Public_Page', false ) ) {
 
 				// What it says depends on who is asking, so it must not be cached.
 				nocache_headers();
+
+				// Page caches ignore the no-cache header and store the response anyway
+				// (WP Super Cache replays it with the cached body); this constant is the
+				// bypass they all read. Required beside every nocache_headers() here.
+				if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+					define( 'DONOTCACHEPAGE', true );
+				}
 			} else {
 				SurveyX_Shortcode_Handler::enqueue_client_assets();
 			}
@@ -914,6 +921,10 @@ if ( ! class_exists( 'SurveyX_Public_Page', false ) ) {
 			// not be stored by a page cache that is not keyed on the login cookie.
 			if ( $this->has_admin_edit_links() ) {
 				nocache_headers();
+
+				if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+					define( 'DONOTCACHEPAGE', true );
+				}
 			}
 
 			status_header( 200 );
@@ -1232,6 +1243,10 @@ if ( ! class_exists( 'SurveyX_Public_Page', false ) ) {
 			$wp_query->set_404();
 			status_header( 404 );
 			nocache_headers();
+
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
 
 			$template = get_query_template( '404' );
 

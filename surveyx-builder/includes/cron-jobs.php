@@ -53,7 +53,7 @@ if ( ! function_exists( 'surveyx_process_sessions_cron' ) ) {
 	function surveyx_process_sessions_cron() {
 		SurveyX_Session_Manager::mark_stale_sessions_as_dropped();
 
-		/** Fires after session processing; Pro uses it for respondent sync and other tasks. */
+		/** Fires after session processing; Pro hooks its orphaned-upload sweep here. */
 		do_action( 'surveyx_after_process_sessions' );
 	}
 

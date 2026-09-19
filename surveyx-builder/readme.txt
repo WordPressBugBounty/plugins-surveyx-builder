@@ -4,7 +4,7 @@ Tags: survey, poll, quiz, questionnaire, feedback
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -193,6 +193,17 @@ Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to c
 
 == Changelog ==
 
+= 2.0.1 =
+* Changed: Vote results refresh every 15 minutes rather than on every vote, so busy polls stay fast - your own vote still appears immediately
+* Fixed: Vote Results showed "No votes yet" on polls that had real votes
+* Fixed: The call-to-action button never appeared on Result and Closing pages
+* Fixed: Answer options were reshuffled every time a respondent went back a question
+* Fixed: On phones the cover image pushed the survey title and Start button below the screen
+* Fixed: Analytics listed and numbered questions in a different order from the survey
+* Fixed: Analytics could show empty figures after switching between the free and Pro versions
+* Fixed: Activating Pro while the free version was still active failed with a fatal error
+* Fixed: The WordPress update notice sat outside the notice area on SurveyX admin screens
+
 = 2.0.0 =
 * Added: Every active survey gets its own shareable page at /survey/{id}/{slug}/, with no shortcode needed
 * Added: Survey pages carry Open Graph and Twitter tags, so a shared link shows a title, description and preview image
@@ -271,5 +282,5 @@ Visit our [GitHub Repository](https://github.com/ThemeRuby/surveyx-builder) to c
 
 == Upgrade Notice ==
 
-= 2.0.0 =
-Every active survey now gets its own shareable page at /survey/{id}/{slug}/, with social preview tags, plus a faster public survey and more than twenty fixes.
+= 2.0.1 =
+Fixes the Vote Results panel reading "No votes yet" on polls that had real votes, call-to-action buttons that never appeared on Result and Closing pages, and analytics numbering questions out of order.

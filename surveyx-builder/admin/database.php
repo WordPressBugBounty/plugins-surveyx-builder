@@ -826,6 +826,8 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 				return;
 			}
 
+			self::delete_answers_by_question_ids( $survey_id, $remove_question_ids );
+
 			foreach ( $remove_question_ids as $rid ) {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete(
@@ -839,6 +841,34 @@ if ( ! class_exists( 'SurveyX_Admin_Db', false ) ) {
 			}
 
 			self::delete_responses_by_question_ids( $remove_question_ids );
+		}
+
+		/**
+		 * Deletes answers associated with specified question IDs in a survey.
+		 *
+		 * @param int   $survey_id           The ID of the survey.
+		 * @param array $remove_question_ids An array of question IDs whose answers should be deleted.
+		 *
+		 * @return void
+		 */
+		public static function delete_answers_by_question_ids( int $survey_id, array $remove_question_ids ) {
+			global $wpdb;
+
+			if ( empty( $remove_question_ids ) ) {
+				return;
+			}
+
+			foreach ( $remove_question_ids as $question_id ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete(
+					$wpdb->prefix . 'surveyx_answers',
+					[
+						'question_id' => (int) $question_id,
+						'survey_id'   => $survey_id,
+					],
+					[ '%d', '%d' ]
+				);
+			}
 		}
 
 		/**

@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SurveyX Builder\n"
 "Report-Msgid-Bugs-To: https://themeruby.com/contact\n"
-"POT-Creation-Date: 2026-09-18 03:53:13+0000\n"
+"POT-Creation-Date: 2026-09-19 12:27:39+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: ThemeRuby <support@themeruby.com>\n"
@@ -2757,6 +2757,11 @@ msgid "Failed to load survey. Please refresh the page."
 msgstr ""
 
 #: assets/client/bundle.js:1
+#: client/rest-routes.php
+msgid "This survey is not available."
+msgstr ""
+
+#: assets/client/bundle.js:1
 msgid "This question requires an answer. Please type your response."
 msgstr ""
 
@@ -3248,10 +3253,6 @@ msgstr ""
 
 #: client/public-page.php
 msgid "A page with this slug already exists. Survey pages will take priority over it."
-msgstr ""
-
-#: client/rest-routes.php
-msgid "This survey is not available."
 msgstr ""
 
 #: includes/db-migration.php

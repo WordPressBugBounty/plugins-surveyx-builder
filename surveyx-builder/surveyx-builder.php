@@ -8,7 +8,7 @@
  * Tags:              poll, survey, quiz, form, feedback
  * License:           GPLv3
  * License URI:       https://www.gnu.org/licenses/gpl-3.0.html
- * Version:           2.0.0
+ * Version:           2.0.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author URI:        https://themeruby.com/
@@ -26,45 +26,52 @@
 defined( 'ABSPATH' ) || exit;
 
 defined( 'SURVEYX_PATH' ) || define( 'SURVEYX_PATH', plugin_dir_path( __FILE__ ) );
-defined( 'SURVEYX_VERSION' ) || define( 'SURVEYX_VERSION', '2.0.0' );
+defined( 'SURVEYX_VERSION' ) || define( 'SURVEYX_VERSION', '2.0.1' );
 defined( 'SURVEYX_URL' ) || define( 'SURVEYX_URL', plugin_dir_url( __FILE__ ) );
 defined( 'SURVEYX_BASENAME' ) || define( 'SURVEYX_BASENAME', plugin_basename( __FILE__ ) );
 defined( 'SURVEYX_REST_NAMESPACE' ) || define( 'SURVEYX_REST_NAMESPACE', 'surveyx/v1' );
 defined( 'SURVEYX_HOST_BASE' ) || define( 'SURVEYX_HOST_BASE', 'https://surveyx.co' );
 
-/**
- * Pin webpack's lazy-chunk base URL onto a registered script handle.
- *
- * `output.publicPath` is 'auto', so webpack derives chunk URLs from the location of
- * the script that is executing. An optimiser that concatenates JS and re-serves it
- * from its own cache directory - Autoptimize, WP Rocket, LiteSpeed, W3 Total Cache -
- * points every dynamic import at a folder holding no chunks, and the respondent hits
- * a ChunkLoadError on the first lazily-loaded question type.
- *
- * Attached at REGISTRATION with wp_add_inline_script( ..., 'before' ) so it travels
- * with the handle wherever it is later enqueued, and is emitted immediately above
- * the script tag. resources/shared/public-path.js reads it.
- *
- * @param string $handle Registered script handle.
- * @return void
- */
-function surveyx_pin_chunk_base_url( $handle ) {
-	static $script = null;
-	static $pinned = [];
+// Declared by BOTH editions. Activating Pro while Free is still active loads both
+// main files in one request, and without this guard the redeclaration is a fatal that
+// WordPress reports only as "the plugin triggered a fatal error" - the exact path a
+// customer takes when they upgrade. The body resolves the edition at call time, so
+// whichever copy wins behaves correctly for the plugin that is actually running.
+if ( ! function_exists( 'surveyx_pin_chunk_base_url' ) ) {
+	/**
+	 * Pin webpack's lazy-chunk base URL onto a registered script handle.
+	 *
+	 * `output.publicPath` is 'auto', so webpack derives chunk URLs from the location of
+	 * the script that is executing. An optimiser that concatenates JS and re-serves it
+	 * from its own cache directory - Autoptimize, WP Rocket, LiteSpeed, W3 Total Cache -
+	 * points every dynamic import at a folder holding no chunks, and the respondent hits
+	 * a ChunkLoadError on the first lazily-loaded question type.
+	 *
+	 * Attached at REGISTRATION with wp_add_inline_script( ..., 'before' ) so it travels
+	 * with the handle wherever it is later enqueued, and is emitted immediately above
+	 * the script tag. resources/shared/public-path.js reads it.
+	 *
+	 * @param string $handle Registered script handle.
+	 * @return void
+	 */
+	function surveyx_pin_chunk_base_url( $handle ) {
+		static $script = null;
+		static $pinned = [];
 
-	// wp_add_inline_script() APPENDS - it has no dedupe of its own - and
-	// register_scripts() is reachable from the enqueue hook, the shortcode and the
-	// standalone page, so without this the same assignment is printed once per call.
-	if ( isset( $pinned[ $handle ] ) ) {
-		return;
+		// wp_add_inline_script() APPENDS - it has no dedupe of its own - and
+		// register_scripts() is reachable from the enqueue hook, the shortcode and the
+		// standalone page, so without this the same assignment is printed once per call.
+		if ( isset( $pinned[ $handle ] ) ) {
+			return;
+		}
+
+		if ( null === $script ) {
+			$base   = ( defined( 'SURVEYX_PRO_VERSION' ) ? SURVEYX_PRO_URL : SURVEYX_URL ) . 'assets/';
+			$script = 'window.surveyxAssetsUrl=' . wp_json_encode( esc_url_raw( $base ) ) . ';';
+		}
+
+		$pinned[ $handle ] = wp_add_inline_script( $handle, $script, 'before' );
 	}
-
-	if ( null === $script ) {
-		$base   = ( defined( 'SURVEYX_PRO_VERSION' ) ? SURVEYX_PRO_URL : SURVEYX_URL ) . 'assets/';
-		$script = 'window.surveyxAssetsUrl=' . wp_json_encode( esc_url_raw( $base ) ) . ';';
-	}
-
-	$pinned[ $handle ] = wp_add_inline_script( $handle, $script, 'before' );
 }
 
 

@@ -662,10 +662,9 @@ if ( ! class_exists( 'SurveyX_Admin_API', false ) ) {
 			SurveyX_Admin_Db::delete_answers( $survey_id, $remove_answer_ids );
 
 			/*
-			 * Deleting questions/answers removes their responses. SurveyX_Db::VOTE_CACHE_TTL
-			 * is 12 HOURS and is a ceiling, not a freshness window — explicit flushes like
-			 * this one are what keep counts current, so dropping this call strands
-			 * pre-deletion counts in /vote-results for up to half a day. The saved action is
+			 * Deleting questions/answers removes their responses, and expiry is the tally's
+			 * only other freshness path — dropping this call strands pre-deletion counts in
+			 * /vote-results for the rest of SurveyX_Db::VOTE_CACHE_TTL. The saved action is
 			 * fired here too because delete_questions()/delete_answers() are the LAST writes
 			 * of the save and do not fire it themselves: a concurrent /init that rebuilt the
 			 * static cache after the earlier save but before these deletes would otherwise

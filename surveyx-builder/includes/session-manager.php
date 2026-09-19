@@ -203,10 +203,9 @@ if ( ! class_exists( 'SurveyX_Session_Manager', false ) ) {
 				SurveyX_Db::delete_all_responses_by_session( $session->id, $respondent_id );
 
 				// A restart drops a whole session's answers in one step, so the tally /vote-results
-				// serves is stale the moment this returns — and this path removes answers without
-				// going through /progress, which flushes after every single answer write. Without
-				// this the respondent could reopen the results drawer and still be shown the votes
-				// they just discarded.
+				// serves is stale the moment this returns. Nothing else invalidates it on a
+				// respondent path, so without this the respondent could reopen the results drawer
+				// and still be shown the votes they just discarded.
 				SurveyX_Db::flush_vote_cache( $survey_id );
 			}
 
